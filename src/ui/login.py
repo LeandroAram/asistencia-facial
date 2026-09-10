@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
 )
 
 from src.database.conexion import validar_usuario
+from src.ui.main_window import MainWindow
 
 
 class LoginWindow(QWidget):
@@ -15,42 +16,73 @@ class LoginWindow(QWidget):
     def __init__(self):
         super().__init__()
 
-        self.setWindowTitle("Sistema de Asistencia Facial")
+        self.setWindowTitle(
+            "Sistema de Asistencia Facial"
+        )
+
         self.setFixedSize(400, 300)
 
-        titulo = QLabel("Inicio de Sesión")
+        titulo = QLabel(
+            "Inicio de Sesión"
+        )
 
         self.usuario_input = QLineEdit()
+
         self.usuario_input.setPlaceholderText(
             "Usuario, correo, DNI o CUIL"
         )
 
         self.contrasenia_input = QLineEdit()
-        self.contrasenia_input.setPlaceholderText("Contraseña")
-        self.contrasenia_input.setEchoMode(QLineEdit.Password)
 
-        self.boton_ingresar = QPushButton("Ingresar")
-        self.boton_ingresar.clicked.connect(self.iniciar_sesion)
+        self.contrasenia_input.setPlaceholderText(
+            "Contraseña"
+        )
+
+        self.contrasenia_input.setEchoMode(
+            QLineEdit.Password
+        )
+
+        self.boton_ingresar = QPushButton(
+            "Ingresar"
+        )
+
+        self.boton_ingresar.clicked.connect(
+            self.iniciar_sesion
+        )
 
         layout = QVBoxLayout()
+
         layout.addWidget(titulo)
-        layout.addWidget(self.usuario_input)
-        layout.addWidget(self.contrasenia_input)
-        layout.addWidget(self.boton_ingresar)
+        layout.addWidget(
+            self.usuario_input
+        )
+        layout.addWidget(
+            self.contrasenia_input
+        )
+        layout.addWidget(
+            self.boton_ingresar
+        )
 
         self.setLayout(layout)
 
     def iniciar_sesion(self):
 
-        identificador = self.usuario_input.text().strip()
-        contrasenia = self.contrasenia_input.text()
+        identificador = (
+            self.usuario_input.text().strip()
+        )
+
+        contrasenia = (
+            self.contrasenia_input.text()
+        )
 
         if not identificador or not contrasenia:
+
             QMessageBox.warning(
                 self,
                 "Campos incompletos",
                 "Ingrese usuario y contraseña."
             )
+
             return
 
         usuario = validar_usuario(
@@ -59,12 +91,17 @@ class LoginWindow(QWidget):
         )
 
         if usuario:
-            QMessageBox.information(
-                self,
-                "Acceso correcto",
-                f"Bienvenido {usuario[1]}"
+
+            self.ventana_principal = MainWindow(
+                usuario[1]
             )
+
+            self.ventana_principal.show()
+
+            self.close()
+
         else:
+
             QMessageBox.critical(
                 self,
                 "Acceso denegado",
