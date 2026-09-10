@@ -168,7 +168,8 @@ class MainWindow(QMainWindow):
             40
         )
 
-        # Estado inicial: cámara cerrada
+        # Estado inicial:
+        # cámara cerrada
         self.boton_abrir_camara.setEnabled(
             True
         )
@@ -196,10 +197,10 @@ class MainWindow(QMainWindow):
         # ----------------------------------------------------
         # PANEL DE CÁMARA
         # ----------------------------------------------------
+        # En este incremento debe quedar vacío.
+        # En el siguiente se mostrará el video.
 
-        self.panel_camara = QLabel(
-            "Panel de cámara"
-        )
+        self.panel_camara = QLabel("")
 
         self.panel_camara.setAlignment(
             Qt.AlignCenter
@@ -218,7 +219,6 @@ class MainWindow(QMainWindow):
             QLabel {
                 border: 2px dashed #666666;
                 border-radius: 8px;
-                font-size: 18px;
             }
         """)
 
@@ -288,9 +288,17 @@ class MainWindow(QMainWindow):
             r"^([01][0-9]|2[0-3]):[0-5][0-9]$"
         )
 
-        validador_hora = (
+        validador_hora_entrada = (
             QRegularExpressionValidator(
-                expresion_hora
+                expresion_hora,
+                self
+            )
+        )
+
+        validador_hora_salida = (
+            QRegularExpressionValidator(
+                expresion_hora,
+                self
             )
         )
 
@@ -298,9 +306,7 @@ class MainWindow(QMainWindow):
         # HORARIO DE ENTRADA
         # ----------------------------------------------------
 
-        self.horario_entrada_input = (
-            QLineEdit()
-        )
+        self.horario_entrada_input = QLineEdit()
 
         self.horario_entrada_input.setPlaceholderText(
             "--:--"
@@ -311,7 +317,7 @@ class MainWindow(QMainWindow):
         )
 
         self.horario_entrada_input.setValidator(
-            validador_hora
+            validador_hora_entrada
         )
 
         formulario_jornada.addRow(
@@ -323,9 +329,7 @@ class MainWindow(QMainWindow):
         # HORARIO DE SALIDA
         # ----------------------------------------------------
 
-        self.horario_salida_input = (
-            QLineEdit()
-        )
+        self.horario_salida_input = QLineEdit()
 
         self.horario_salida_input.setPlaceholderText(
             "--:--"
@@ -336,7 +340,7 @@ class MainWindow(QMainWindow):
         )
 
         self.horario_salida_input.setValidator(
-            validador_hora
+            validador_hora_salida
         )
 
         formulario_jornada.addRow(
@@ -389,7 +393,8 @@ class MainWindow(QMainWindow):
             self.pagina_alumno
         )
 
-        # Primera opción por defecto
+        # La primera opción debe aparecer
+        # al iniciar sesión.
         self.paginas.setCurrentIndex(0)
 
         # ====================================================
@@ -412,7 +417,7 @@ class MainWindow(QMainWindow):
         )
 
         # ====================================================
-        # BOTONES DE LA CÁMARA
+        # BOTONES DE CÁMARA
         # ====================================================
 
         self.boton_abrir_camara.clicked.connect(
@@ -474,7 +479,8 @@ class MainWindow(QMainWindow):
 
     def abrir_camara(self):
 
-        # Primero verificar la jornada
+        # Primero comprobar que la Jornada
+        # esté configurada.
         if not self.jornada_configurada():
 
             QMessageBox.critical(
@@ -487,12 +493,14 @@ class MainWindow(QMainWindow):
                 )
             )
 
-            # IMPORTANTE:
-            # No cambiamos el estado de los botones
+            # Si la Jornada no está configurada,
+            # los botones no cambian.
             return
 
-        # En este incremento NO se abre realmente la cámara.
-        # Solamente se cambia el estado de los controles.
+        # En este incremento NO se abre
+        # realmente la webcam.
+        #
+        # Solamente alternamos los botones.
 
         self.boton_abrir_camara.setEnabled(
             False
@@ -502,9 +510,8 @@ class MainWindow(QMainWindow):
             True
         )
 
-        self.panel_camara.setText(
-            "Cámara abierta"
-        )
+        # El panel permanece vacío.
+        self.panel_camara.clear()
 
     # ========================================================
     # CERRAR CÁMARA
@@ -520,6 +527,5 @@ class MainWindow(QMainWindow):
             False
         )
 
-        self.panel_camara.setText(
-            "Panel de cámara"
-        )
+        # El panel continúa vacío.
+        self.panel_camara.clear()
