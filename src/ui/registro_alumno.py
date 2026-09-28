@@ -18,6 +18,7 @@ from PySide6.QtCore import Qt, QDate
 from PySide6.QtGui import QPixmap
 
 from src.database.conexion import registrar_alumno
+from src.ui.captura_foto import CapturaFotoDialog
 
 
 # ============================================================
@@ -30,6 +31,7 @@ class FotoAnguloWidget(QGroupBox):
         super().__init__(titulo)
 
         self.ruta_imagen = None
+        self.imagen_bytes = None
 
         layout = QVBoxLayout()
         self.setLayout(layout)
@@ -39,8 +41,15 @@ class FotoAnguloWidget(QGroupBox):
         # ----------------------------------------------------
 
         self.preview = QLabel("Sin imagen todavía")
-        self.preview.setAlignment(Qt.AlignCenter)
-        self.preview.setFixedSize(200, 140)
+
+        self.preview.setAlignment(
+            Qt.AlignCenter
+        )
+
+        self.preview.setFixedSize(
+            200,
+            140
+        )
 
         self.preview.setStyleSheet("""
             QLabel {
@@ -54,12 +63,25 @@ class FotoAnguloWidget(QGroupBox):
         # BOTONES
         # ----------------------------------------------------
 
-        self.boton_cargar = QPushButton("Cargar Foto")
-        self.boton_tomar = QPushButton("Tomar Foto")
+        self.boton_cargar = QPushButton(
+            "Cargar Foto"
+        )
 
-        self.boton_eliminar = QPushButton("🗑")
-        self.boton_eliminar.setFixedWidth(40)
-        self.boton_eliminar.setVisible(False)
+        self.boton_tomar = QPushButton(
+            "Tomar Foto"
+        )
+
+        self.boton_eliminar = QPushButton(
+            "🗑"
+        )
+
+        self.boton_eliminar.setFixedWidth(
+            40
+        )
+
+        self.boton_eliminar.setVisible(
+            False
+        )
 
         self.boton_eliminar.setStyleSheet("""
             QPushButton {
@@ -71,16 +93,26 @@ class FotoAnguloWidget(QGroupBox):
 
         layout_botones = QHBoxLayout()
 
-        layout_botones.addWidget(self.boton_cargar)
-        layout_botones.addWidget(self.boton_tomar)
-        layout_botones.addWidget(self.boton_eliminar)
+        layout_botones.addWidget(
+            self.boton_cargar
+        )
+
+        layout_botones.addWidget(
+            self.boton_tomar
+        )
+
+        layout_botones.addWidget(
+            self.boton_eliminar
+        )
 
         layout.addWidget(
             self.preview,
             alignment=Qt.AlignCenter
         )
 
-        layout.addLayout(layout_botones)
+        layout.addLayout(
+            layout_botones
+        )
 
         # ----------------------------------------------------
         # EVENTOS
@@ -90,12 +122,13 @@ class FotoAnguloWidget(QGroupBox):
             self.cargar_foto
         )
 
+        self.boton_tomar.clicked.connect(
+            self.tomar_foto
+        )
+
         self.boton_eliminar.clicked.connect(
             self.limpiar_foto
         )
-
-        # El botón Tomar Foto queda habilitado,
-        # pero no hace nada en este incremento.
 
     # ========================================================
     # CARGAR FOTO DESDE LA COMPUTADORA
@@ -126,6 +159,7 @@ class FotoAnguloWidget(QGroupBox):
             return
 
         self.ruta_imagen = ruta
+        self.imagen_bytes = None
 
         imagen_escalada = pixmap.scaled(
             self.preview.size(),
@@ -137,7 +171,67 @@ class FotoAnguloWidget(QGroupBox):
             imagen_escalada
         )
 
-        self.boton_eliminar.setVisible(True)
+        self.boton_eliminar.setVisible(
+            True
+        )
+
+    # ========================================================
+    # TOMAR FOTO CON WEBCAM
+    # ========================================================
+
+    def tomar_foto(self):
+
+        ventana = CapturaFotoDialog(
+            self
+        )
+
+        ventana.foto_capturada.connect(
+            self.recibir_foto_capturada
+        )
+
+        ventana.exec()
+
+    # ========================================================
+    # RECIBIR FOTO CAPTURADA
+    # ========================================================
+
+    def recibir_foto_capturada(
+        self,
+        imagen_bytes
+    ):
+
+        self.imagen_bytes = imagen_bytes
+        self.ruta_imagen = None
+
+        pixmap = QPixmap()
+
+        pixmap.loadFromData(
+            imagen_bytes
+        )
+
+        if pixmap.isNull():
+
+            QMessageBox.warning(
+                self,
+                "Error",
+                "No se pudo mostrar la fotografía capturada."
+            )
+
+            return
+
+        imagen_escalada = pixmap.scaled(
+            self.preview.size(),
+            Qt.KeepAspectRatio,
+            Qt.SmoothTransformation
+        )
+
+        self.preview.setPixmap(
+            imagen_escalada
+        )
+
+        self.boton_eliminar.setVisible(
+            True
+        )
 
     # ========================================================
     # OBTENER IMAGEN COMO BYTES
@@ -145,7 +239,14 @@ class FotoAnguloWidget(QGroupBox):
 
     def obtener_bytes(self):
 
+        # Si la foto fue tomada con webcam
+        if self.imagen_bytes is not None:
+
+            return self.imagen_bytes
+
+        # Si la foto fue cargada desde archivo
         if not self.ruta_imagen:
+
             return None
 
         try:
@@ -168,6 +269,7 @@ class FotoAnguloWidget(QGroupBox):
     def limpiar_foto(self):
 
         self.ruta_imagen = None
+        self.imagen_bytes = None
 
         self.preview.clear()
 
@@ -175,7 +277,9 @@ class FotoAnguloWidget(QGroupBox):
             "Sin imagen todavía"
         )
 
-        self.boton_eliminar.setVisible(False)
+        self.boton_eliminar.setVisible(
+            False
+        )
 
 
 # ============================================================
@@ -188,7 +292,9 @@ class RegistroAlumnoWidget(QWidget):
         super().__init__()
 
         layout_general = QVBoxLayout()
-        self.setLayout(layout_general)
+        self.setLayout(
+            layout_general
+        )
 
         # ====================================================
         # SCROLL
@@ -196,7 +302,9 @@ class RegistroAlumnoWidget(QWidget):
 
         scroll = QScrollArea()
 
-        scroll.setWidgetResizable(True)
+        scroll.setWidgetResizable(
+            True
+        )
 
         contenido = QWidget()
 
@@ -206,9 +314,13 @@ class RegistroAlumnoWidget(QWidget):
             layout_contenido
         )
 
-        scroll.setWidget(contenido)
+        scroll.setWidget(
+            contenido
+        )
 
-        layout_general.addWidget(scroll)
+        layout_general.addWidget(
+            scroll
+        )
 
         # ====================================================
         # TÍTULO
@@ -246,20 +358,12 @@ class RegistroAlumnoWidget(QWidget):
             formulario
         )
 
-        # ----------------------------------------------------
-        # NOMBRE
-        # ----------------------------------------------------
-
         self.nombre_input = QLineEdit()
 
         formulario.addRow(
             "Nombre:",
             self.nombre_input
         )
-
-        # ----------------------------------------------------
-        # APELLIDO
-        # ----------------------------------------------------
 
         self.apellido_input = QLineEdit()
 
@@ -268,20 +372,12 @@ class RegistroAlumnoWidget(QWidget):
             self.apellido_input
         )
 
-        # ----------------------------------------------------
-        # DNI
-        # ----------------------------------------------------
-
         self.dni_input = QLineEdit()
 
         formulario.addRow(
             "DNI:",
             self.dni_input
         )
-
-        # ----------------------------------------------------
-        # CARRERA
-        # ----------------------------------------------------
 
         self.carrera_input = QLineEdit()
 
@@ -290,20 +386,12 @@ class RegistroAlumnoWidget(QWidget):
             self.carrera_input
         )
 
-        # ----------------------------------------------------
-        # CELULAR
-        # ----------------------------------------------------
-
         self.celular_input = QLineEdit()
 
         formulario.addRow(
             "Celular:",
             self.celular_input
         )
-
-        # ----------------------------------------------------
-        # CORREO
-        # ----------------------------------------------------
 
         self.correo_input = QLineEdit()
 
@@ -364,7 +452,9 @@ class RegistroAlumnoWidget(QWidget):
             "Seleccione el año"
         )
 
-        self.anio_ingreso_input.setValue(0)
+        self.anio_ingreso_input.setValue(
+            0
+        )
 
         formulario.addRow(
             "Año de ingreso:",
@@ -473,13 +563,17 @@ class RegistroAlumnoWidget(QWidget):
             self.registrar
         )
 
-        layout_contenido.addSpacing(20)
+        layout_contenido.addSpacing(
+            20
+        )
 
         layout_contenido.addWidget(
             self.boton_registrar
         )
 
-        layout_contenido.addSpacing(20)
+        layout_contenido.addSpacing(
+            20
+        )
 
     # ========================================================
     # REGISTRAR ALUMNO
@@ -488,43 +582,61 @@ class RegistroAlumnoWidget(QWidget):
     def registrar(self):
 
         nombre = (
-            self.nombre_input.text().strip()
+            self.nombre_input
+            .text()
+            .strip()
         )
 
         apellido = (
-            self.apellido_input.text().strip()
+            self.apellido_input
+            .text()
+            .strip()
         )
 
         dni = (
-            self.dni_input.text().strip()
+            self.dni_input
+            .text()
+            .strip()
         )
 
         carrera = (
-            self.carrera_input.text().strip()
+            self.carrera_input
+            .text()
+            .strip()
         )
 
         celular = (
-            self.celular_input.text().strip()
+            self.celular_input
+            .text()
+            .strip()
         )
 
         correo = (
-            self.correo_input.text().strip()
+            self.correo_input
+            .text()
+            .strip()
         )
 
         domicilio = (
-            self.domicilio_input.text().strip()
+            self.domicilio_input
+            .text()
+            .strip()
         )
 
         libreta = (
-            self.libreta_input.text().strip()
+            self.libreta_input
+            .text()
+            .strip()
         )
 
         fecha = (
-            self.fecha_nacimiento_input.date()
+            self.fecha_nacimiento_input
+            .date()
         )
 
         anio_ingreso = (
-            self.anio_ingreso_input.value()
+            self.anio_ingreso_input
+            .value()
         )
 
         # ====================================================
@@ -532,19 +644,22 @@ class RegistroAlumnoWidget(QWidget):
         # ====================================================
 
         frontal = (
-            self.foto_frontal.obtener_bytes()
+            self.foto_frontal
+            .obtener_bytes()
         )
 
         izquierda = (
-            self.foto_izquierda.obtener_bytes()
+            self.foto_izquierda
+            .obtener_bytes()
         )
 
         derecha = (
-            self.foto_derecha.obtener_bytes()
+            self.foto_derecha
+            .obtener_bytes()
         )
 
         # ====================================================
-        # VALIDAR CAMPOS OBLIGATORIOS
+        # VALIDAR CAMPOS
         # ====================================================
 
         campos_texto = [
@@ -574,7 +689,7 @@ class RegistroAlumnoWidget(QWidget):
                     "Existen campos obligatorios "
                     "sin completar.\n\n"
                     "Debe completar todos los datos "
-                    "y cargar las tres imágenes."
+                    "y cargar o tomar las tres imágenes."
                 )
             )
 
@@ -599,26 +714,34 @@ class RegistroAlumnoWidget(QWidget):
             "correo_electronico": correo,
 
             "fecha_nacimiento":
-                fecha.toString("yyyy-MM-dd"),
+                fecha.toString(
+                    "yyyy-MM-dd"
+                ),
 
-            "anio_ingreso": anio_ingreso,
+            "anio_ingreso":
+                anio_ingreso,
 
-            "domicilio": domicilio,
+            "domicilio":
+                domicilio,
 
-            "libreta": libreta
+            "libreta":
+                libreta
         }
 
         fotos = {
 
-            "frontal": frontal,
+            "frontal":
+                frontal,
 
-            "izquierdo": izquierda,
+            "izquierdo":
+                izquierda,
 
-            "derecho": derecha
+            "derecho":
+                derecha
         }
 
         # ====================================================
-        # GUARDAR
+        # GUARDAR EN BASE DE DATOS
         # ====================================================
 
         exito, mensaje = registrar_alumno(
@@ -663,8 +786,12 @@ class RegistroAlumnoWidget(QWidget):
             self.fecha_minima
         )
 
-        self.anio_ingreso_input.setValue(0)
+        self.anio_ingreso_input.setValue(
+            0
+        )
 
         self.foto_frontal.limpiar_foto()
+
         self.foto_izquierda.limpiar_foto()
+
         self.foto_derecha.limpiar_foto()

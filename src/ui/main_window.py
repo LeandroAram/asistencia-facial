@@ -1,3 +1,5 @@
+import cv2
+
 from PySide6.QtWidgets import (
     QMainWindow,
     QWidget,
@@ -15,14 +17,18 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import (
     Qt,
     QDate,
-    QRegularExpression
+    QRegularExpression,
+    QTimer
 )
 
 from PySide6.QtGui import (
-    QRegularExpressionValidator
+    QRegularExpressionValidator,
+    QImage,
+    QPixmap
 )
 
 from src.ui.registro_alumno import RegistroAlumnoWidget
+from src.camera.camera_manager import CameraManager
 
 
 class MainWindow(QMainWindow):
@@ -32,8 +38,19 @@ class MainWindow(QMainWindow):
 
         self.nombre_usuario = nombre_usuario
 
-        # La cámara siempre comienza cerrada
+        # ====================================================
+        # ESTADO DE CÁMARA
+        # ====================================================
+
         self.camara_abierta = False
+
+        self.camera = CameraManager()
+
+        self.timer_camara = QTimer(self)
+
+        self.timer_camara.timeout.connect(
+            self.actualizar_video_camara
+        )
 
         self.setWindowTitle(
             "Sistema de Asistencia Facial"
@@ -64,12 +81,18 @@ class MainWindow(QMainWindow):
         titulo_sistema = QLabel(
             "Sistema de Asistencia Facial"
         )
-        titulo_sistema.setAlignment(Qt.AlignCenter)
+
+        titulo_sistema.setAlignment(
+            Qt.AlignCenter
+        )
 
         usuario_label = QLabel(
             f"Bienvenido, {self.nombre_usuario}"
         )
-        usuario_label.setAlignment(Qt.AlignCenter)
+
+        usuario_label.setAlignment(
+            Qt.AlignCenter
+        )
 
         self.boton_asistencia = QPushButton(
             "Asistencia por Captura Facial"
@@ -83,8 +106,13 @@ class MainWindow(QMainWindow):
             "Registrar Alumno"
         )
 
-        layout_menu.addWidget(titulo_sistema)
-        layout_menu.addWidget(usuario_label)
+        layout_menu.addWidget(
+            titulo_sistema
+        )
+
+        layout_menu.addWidget(
+            usuario_label
+        )
 
         layout_menu.addSpacing(30)
 
@@ -160,9 +188,6 @@ class MainWindow(QMainWindow):
             40
         )
 
-        # IMPORTANTE:
-        # Al iniciar, ninguno puede usarse porque
-        # todavía no está configurada la Jornada.
         self.boton_abrir_camara.setEnabled(
             False
         )
@@ -183,10 +208,12 @@ class MainWindow(QMainWindow):
             layout_botones_camara
         )
 
-        layout_asistencia.addSpacing(20)
+        layout_asistencia.addSpacing(
+            20
+        )
 
         # ----------------------------------------------------
-        # PANEL DE CÁMARA
+        # PANEL DE VIDEO
         # ----------------------------------------------------
 
         self.panel_camara = QLabel("")
@@ -248,7 +275,9 @@ class MainWindow(QMainWindow):
             titulo_jornada
         )
 
-        layout_jornada_principal.addSpacing(30)
+        layout_jornada_principal.addSpacing(
+            30
+        )
 
         formulario_jornada = QFormLayout()
 
@@ -290,7 +319,7 @@ class MainWindow(QMainWindow):
         )
 
         # ----------------------------------------------------
-        # HORARIO DE ENTRADA
+        # HORARIO ENTRADA
         # ----------------------------------------------------
 
         self.horario_entrada_input = QLineEdit()
@@ -313,7 +342,7 @@ class MainWindow(QMainWindow):
         )
 
         # ----------------------------------------------------
-        # HORARIO DE SALIDA
+        # HORARIO SALIDA
         # ----------------------------------------------------
 
         self.horario_salida_input = QLineEdit()
@@ -357,7 +386,7 @@ class MainWindow(QMainWindow):
         layout_jornada_principal.addStretch()
 
         # ====================================================
-        # DETECTAR CAMBIOS EN LA JORNADA
+        # DETECTAR CAMBIOS EN JORNADA
         # ====================================================
 
         self.horario_entrada_input.textChanged.connect(
@@ -396,7 +425,6 @@ class MainWindow(QMainWindow):
             self.pagina_alumno
         )
 
-        # Página inicial
         self.paginas.setCurrentIndex(0)
 
         # ====================================================
@@ -404,18 +432,15 @@ class MainWindow(QMainWindow):
         # ====================================================
 
         self.boton_asistencia.clicked.connect(
-            lambda:
-            self.paginas.setCurrentIndex(0)
+            self.ir_asistencia
         )
 
         self.boton_jornada.clicked.connect(
-            lambda:
-            self.paginas.setCurrentIndex(1)
+            self.ir_jornada
         )
 
         self.boton_alumno.clicked.connect(
-            lambda:
-            self.paginas.setCurrentIndex(2)
+            self.ir_registro_alumno
         )
 
         # ====================================================
@@ -442,11 +467,34 @@ class MainWindow(QMainWindow):
             self.paginas
         )
 
-        # Comprobar estado inicial
         self.actualizar_estado_camara()
 
     # ========================================================
-    # COMPROBAR CONFIGURACIÓN DE JORNADA
+    # NAVEGACIÓN
+    # ========================================================
+
+    def ir_asistencia(self):
+
+        self.paginas.setCurrentIndex(0)
+
+    def ir_jornada(self):
+
+        # Si estaba abierta, liberamos la webcam
+        if self.camara_abierta:
+            self.cerrar_camara()
+
+        self.paginas.setCurrentIndex(1)
+
+    def ir_registro_alumno(self):
+
+        # Si estaba abierta, liberamos la webcam
+        if self.camara_abierta:
+            self.cerrar_camara()
+
+        self.paginas.setCurrentIndex(2)
+
+    # ========================================================
+    # JORNADA CONFIGURADA
     # ========================================================
 
     def jornada_configurada(self):
@@ -469,7 +517,6 @@ class MainWindow(QMainWindow):
             .strip()
         )
 
-        # Deben existir los tres datos
         if not horario_entrada:
             return False
 
@@ -479,7 +526,6 @@ class MainWindow(QMainWindow):
         if not catedra:
             return False
 
-        # Los horarios deben ser válidos
         if not self.horario_entrada_input.hasAcceptableInput():
             return False
 
@@ -489,23 +535,18 @@ class MainWindow(QMainWindow):
         return True
 
     # ========================================================
-    # ACTUALIZAR ESTADO DE LOS BOTONES
+    # ACTUALIZAR ESTADO
     # ========================================================
 
     def actualizar_estado_camara(self):
 
-        # ----------------------------------------------------
-        # JORNADA NO CONFIGURADA
-        # ----------------------------------------------------
-
         if not self.jornada_configurada():
 
-            # Si se borra cualquier dato,
-            # automáticamente consideramos
-            # la cámara cerrada.
-            self.camara_abierta = False
+            # Si se elimina un dato mientras está abierta,
+            # también liberamos la webcam.
+            if self.camara_abierta:
+                self.cerrar_camara()
 
-            # Ningún botón queda disponible
             self.boton_abrir_camara.setEnabled(
                 False
             )
@@ -517,10 +558,6 @@ class MainWindow(QMainWindow):
             self.panel_camara.clear()
 
             return
-
-        # ----------------------------------------------------
-        # JORNADA CONFIGURADA
-        # ----------------------------------------------------
 
         if self.camara_abierta:
 
@@ -534,7 +571,6 @@ class MainWindow(QMainWindow):
 
         else:
 
-            # Recién ahora puede abrirse la cámara
             self.boton_abrir_camara.setEnabled(
                 True
             )
@@ -544,12 +580,11 @@ class MainWindow(QMainWindow):
             )
 
     # ========================================================
-    # ABRIR CÁMARA
+    # ABRIR CÁMARA REAL
     # ========================================================
 
     def abrir_camara(self):
 
-        # Seguridad extra
         if not self.jornada_configurada():
 
             QMessageBox.critical(
@@ -557,30 +592,106 @@ class MainWindow(QMainWindow):
                 "Jornada no configurada",
                 (
                     "Antes de abrir la Cámara del Sistema "
-                    "debe configurarse los parámetros de la "
-                    "Jornada."
+                    "debe configurarse los parámetros "
+                    "de la Jornada."
                 )
             )
 
-            self.actualizar_estado_camara()
+            return
+
+        if not self.camera.abrir():
+
+            QMessageBox.critical(
+                self,
+                "Error de cámara",
+                "No se pudo abrir la webcam."
+            )
 
             return
 
         self.camara_abierta = True
 
+        self.timer_camara.start(
+            30
+        )
+
         self.actualizar_estado_camara()
 
-        # En este incremento el panel continúa vacío
-        self.panel_camara.clear()
+    # ========================================================
+    # VIDEO EN TIEMPO REAL
+    # ========================================================
+
+    def actualizar_video_camara(self):
+
+        frame = self.camera.leer_frame()
+
+        if frame is None:
+            return
+
+        frame_rgb = cv2.cvtColor(
+            frame,
+            cv2.COLOR_BGR2RGB
+        )
+
+        alto, ancho, canales = (
+            frame_rgb.shape
+        )
+
+        bytes_por_linea = (
+            canales * ancho
+        )
+
+        imagen = QImage(
+            frame_rgb.data,
+            ancho,
+            alto,
+            bytes_por_linea,
+            QImage.Format_RGB888
+        )
+
+        pixmap = QPixmap.fromImage(
+            imagen
+        )
+
+        self.panel_camara.setPixmap(
+            pixmap.scaled(
+                self.panel_camara.size(),
+                Qt.KeepAspectRatio,
+                Qt.SmoothTransformation
+            )
+        )
 
     # ========================================================
-    # CERRAR CÁMARA
+    # CERRAR CÁMARA REAL
     # ========================================================
 
     def cerrar_camara(self):
 
+        if self.timer_camara.isActive():
+
+            self.timer_camara.stop()
+
+        self.camera.cerrar()
+
         self.camara_abierta = False
+
+        self.panel_camara.clear()
 
         self.actualizar_estado_camara()
 
-        self.panel_camara.clear()
+    # ========================================================
+    # CERRAR APLICACIÓN
+    # ========================================================
+
+    def closeEvent(self, event):
+
+        # Liberar webcam si la aplicación se cierra
+        if self.timer_camara.isActive():
+
+            self.timer_camara.stop()
+
+        self.camera.cerrar()
+
+        self.camara_abierta = False
+
+        event.accept()
