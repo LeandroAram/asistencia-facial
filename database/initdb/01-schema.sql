@@ -51,7 +51,8 @@ CREATE TABLE "jornada"(
     "fecha" DATE NOT NULL,
     "horario_salida" TIME(0) WITHOUT TIME ZONE NOT NULL,
     "horario_entrada" TIME(0) WITHOUT TIME ZONE NOT NULL,
-    "usuario_id" INTEGER NOT NULL
+    "usuario_id" INTEGER NOT NULL,
+    "catedra" VARCHAR(150) NULL
 );
 ALTER TABLE
     "jornada" ADD PRIMARY KEY("id");
@@ -64,6 +65,8 @@ CREATE TABLE "asistencia"(
 );
 ALTER TABLE
     "asistencia" ADD PRIMARY KEY("id");
+ALTER TABLE
+    "asistencia" ADD CONSTRAINT "asistencia_jornada_alumno_unique" UNIQUE("jornada_id", "alumno_id");
 ALTER TABLE
     "asistencia" ADD CONSTRAINT "asistencia_alumno_id_foreign" FOREIGN KEY("alumno_id") REFERENCES "alumno"("id");
 ALTER TABLE

@@ -1,4 +1,5 @@
 import cv2
+from time import monotonic
 
 from PySide6.QtWidgets import (
     QMainWindow,
@@ -19,7 +20,10 @@ from PySide6.QtCore import (
     Qt,
     QDate,
     QRegularExpression,
-    QTimer
+    QTimer,
+    QThread,
+    Signal,
+    Slot
 )
 
 from PySide6.QtGui import (
@@ -30,14 +34,18 @@ from PySide6.QtGui import (
 
 from src.ui.registro_alumno import RegistroAlumnoWidget
 from src.camera.camera_manager import CameraManager
+from src.recognition.trabajador_reconocimiento import TrabajadorReconocimiento
 
 from src.database.conexion import (
     crear_jornada,
-    actualizar_jornada
+    actualizar_jornada,
+    procesar_asistencia
 )
 
 
 class MainWindow(QMainWindow):
+
+    solicitar_reconocimiento = Signal(object)
 
     def __init__(
         self,
@@ -63,6 +71,32 @@ class MainWindow(QMainWindow):
         self.camara_abierta = False
 
         self.camera = CameraManager()
+
+        # La UI lee la cámara; un único trabajador ejecuta FaceNet.
+        self.detector_asistencia = None
+        self.referencias_listas = False
+        self.recarga_pendiente = False
+        self.sesion_reconocimiento = 0
+        self.cerrando = False
+        self.procesando_reconocimiento = False
+        self.proximo_reconocimiento = 0.0
+        self.intervalo_reconocimiento = 2.0
+
+        self.hilo_reconocimiento = QThread(self)
+        self.trabajador_reconocimiento = TrabajadorReconocimiento()
+        self.trabajador_reconocimiento.moveToThread(self.hilo_reconocimiento)
+        self.solicitar_reconocimiento.connect(
+            self.trabajador_reconocimiento.ejecutar,
+            Qt.QueuedConnection
+        )
+        self.trabajador_reconocimiento.terminado.connect(
+            self.recibir_reconocimiento,
+            Qt.QueuedConnection
+        )
+        self.hilo_reconocimiento.finished.connect(
+            self.trabajador_reconocimiento.deleteLater
+        )
+        self.hilo_reconocimiento.finished.connect(self.finalizar_cierre)
 
         self.timer_camara = QTimer(self)
 
@@ -831,6 +865,13 @@ class MainWindow(QMainWindow):
             botones
         )
 
+        self.estado_reconocimiento_label = QLabel(
+            "Guarde una Jornada y abra la cámara para reconocer."
+        )
+        self.estado_reconocimiento_label.setWordWrap(True)
+        self.estado_reconocimiento_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.estado_reconocimiento_label)
+
         self.panel_camara = QLabel(
             "📷\n\nLa cámara aparecerá aquí"
         )
@@ -1500,6 +1541,8 @@ class MainWindow(QMainWindow):
 
         self.camara_abierta = True
 
+        self.preparar_reconocimiento()
+
         self.timer_camara.start(
             30
         )
@@ -1512,15 +1555,32 @@ class MainWindow(QMainWindow):
 
     def actualizar_video_camara(self):
 
+        if (
+            self.cerrando
+            or not self.camara_abierta
+            or not self.puede_abrir_camara()
+            or self.paginas.currentIndex() != 0
+        ):
+            return
+
         frame = self.camera.leer_frame()
 
         if frame is None:
+            self.sesion_reconocimiento += 1
+            self.estado_reconocimiento_label.setText(
+                "No se pudo leer la cámara. Cierre y vuelva a abrirla."
+            )
             return
 
         frame = cv2.flip(
             frame,
             1
         )
+
+        # Detectar y reconocer antes de dibujar sobre la imagen.
+        rostros = self.procesar_frame_asistencia(frame)
+        for x, y, w, h in rostros:
+            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 200, 0), 2)
 
         frame_rgb = cv2.cvtColor(
             frame,
@@ -1559,7 +1619,159 @@ class MainWindow(QMainWindow):
     # CERRAR CÁMARA
     # ========================================================
 
+    def preparar_reconocimiento(self):
+        self.referencias_listas = False
+        self.sesion_reconocimiento += 1
+        self.estado_reconocimiento_label.setText(
+            "Cargando reconocimiento y fotografías de referencia..."
+        )
+        if self.procesando_reconocimiento:
+            # Reabrir durante una inferencia no encola otro trabajo.
+            self.recarga_pendiente = True
+            return
+        self.recarga_pendiente = False
+        try:
+            if self.detector_asistencia is None:
+                self.detector_asistencia = cv2.CascadeClassifier(
+                    cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+                )
+                if self.detector_asistencia.empty():
+                    self.detector_asistencia = None
+                    raise RuntimeError("No se pudo cargar Haar Cascade.")
+            if not self.hilo_reconocimiento.isRunning():
+                self.hilo_reconocimiento.start()
+            self.enviar_trabajo("preparar")
+        except Exception as error:
+            print("Error preparando reconocimiento:", error)
+            self.estado_reconocimiento_label.setText(
+                "No se pudo iniciar el reconocimiento. Vuelva a abrir la cámara."
+            )
+
+    def enviar_trabajo(self, tipo, frame=None, rostros=None):
+        if self.procesando_reconocimiento or self.cerrando:
+            return
+        self.procesando_reconocimiento = True
+        self.solicitar_reconocimiento.emit({
+            "tipo": tipo,
+            "sesion": self.sesion_reconocimiento,
+            "jornada_id": self.jornada_id,
+            # El dibujo y el siguiente frame no modifican la imagen del trabajador.
+            "frame": frame.copy() if frame is not None else None,
+            "rostros": rostros.copy() if rostros is not None else None,
+        })
+
+    def procesar_frame_asistencia(self, frame):
+        if (
+            self.cerrando
+            or self.detector_asistencia is None
+            or not self.camara_abierta
+            or not self.puede_abrir_camara()
+            or self.paginas.currentIndex() != 0
+        ):
+            return []
+        try:
+            # Detector exclusivo de la UI: no se comparte con la carga de fotos.
+            gris = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            rostros = self.detector_asistencia.detectMultiScale(
+                gris, scaleFactor=1.1, minNeighbors=5, minSize=(80, 80)
+            )
+            if len(rostros) != 1:
+                # Si la escena deja de ser válida, descartar también el resultado pendiente.
+                self.sesion_reconocimiento += 1
+                self.estado_reconocimiento_label.setText(
+                    "Sin rostro. Mire a la cámara." if len(rostros) == 0 else
+                    "Hay varios rostros. Debe quedar una sola persona."
+                )
+            elif self.procesando_reconocimiento:
+                self.estado_reconocimiento_label.setText(
+                    "Reconociendo rostro..." if self.referencias_listas else
+                    "Cargando reconocimiento y fotografías de referencia..."
+                )
+            elif self.referencias_listas and monotonic() >= self.proximo_reconocimiento:
+                self.estado_reconocimiento_label.setText("Reconociendo rostro...")
+                self.enviar_trabajo("reconocer", frame, rostros)
+            elif not self.referencias_listas:
+                self.estado_reconocimiento_label.setText(
+                    "Sin referencias disponibles. Revise las fotos y la conexión; "
+                    "luego vuelva a abrir la cámara."
+                )
+            return rostros
+        except Exception as error:
+            self.sesion_reconocimiento += 1
+            print("Error detectando rostros:", error)
+            self.estado_reconocimiento_label.setText("No se pudo detectar el rostro.")
+            return []
+
+    @Slot(object)
+    def recibir_reconocimiento(self, respuesta):
+        self.procesando_reconocimiento = False
+        self.proximo_reconocimiento = monotonic() + self.intervalo_reconocimiento
+        if self.cerrando:
+            return
+        if self.recarga_pendiente:
+            if self.camara_abierta:
+                self.preparar_reconocimiento()
+            return
+        if respuesta["tipo"] == "preparar":
+            self.referencias_listas = not respuesta.get("error") and respuesta.get("cantidad", 0) > 0
+            if self.camara_abierta and self.paginas.currentIndex() == 0:
+                self.estado_reconocimiento_label.setText(
+                    "Referencias listas. Ubique un solo rostro." if self.referencias_listas else
+                    "Sin referencias disponibles. Revise las fotos y la conexión; "
+                    "luego vuelva a abrir la cámara."
+                )
+            return
+        # Solo la UI persiste, después de validar que el contexto siga vigente.
+        if (
+            respuesta["sesion"] != self.sesion_reconocimiento
+            or respuesta["jornada_id"] != self.jornada_id
+            or not self.camara_abierta
+            or not self.puede_abrir_camara()
+            or self.paginas.currentIndex() != 0
+        ):
+            return
+        if respuesta.get("error"):
+            self.estado_reconocimiento_label.setText(
+                "Error en el reconocimiento. Se reintentará."
+            )
+            return
+        resultado = respuesta["resultado"]
+        if resultado["estado"] == "reconocido":
+            try:
+                exito, estado = procesar_asistencia(
+                    resultado["alumno_id"], self.jornada_id
+                )
+            except Exception as error:
+                print("Error registrando asistencia:", error)
+                exito, estado = False, "error"
+            nombre = f'{resultado["nombre"]} {resultado["apellido"]}'
+            mensajes = {
+                "entrada_registrada": "Entrada registrada",
+                "salida_registrada": "Salida registrada",
+                "asistencia_completa": "Ya tiene entrada y salida registradas",
+                "salida_no_habilitada": "Entrada registrada; salida aún no habilitada",
+            }
+            mensaje = mensajes.get(estado, "Asistencia procesada") if exito else (
+                "No se pudo registrar la asistencia. Se reintentará."
+            )
+            self.estado_reconocimiento_label.setText(f"{nombre}: {mensaje}")
+        else:
+            mensajes = {
+                "no_reconocido": "Rostro no reconocido.",
+                "error_embedding": "No se pudo analizar el rostro. Se reintentará.",
+                "sin_referencias": "No hay referencias válidas.",
+                "sin_rostro": "Sin rostro. Mire a la cámara.",
+                "multiples_rostros": "Debe quedar una sola persona.",
+            }
+            self.estado_reconocimiento_label.setText(
+                mensajes.get(resultado["estado"], "No se pudo reconocer el rostro.")
+            )
+
     def cerrar_camara(self):
+
+        self.sesion_reconocimiento += 1
+        self.referencias_listas = False
+        self.recarga_pendiente = False
 
         if self.timer_camara.isActive():
 
@@ -1568,6 +1780,8 @@ class MainWindow(QMainWindow):
         self.camera.cerrar()
 
         self.camara_abierta = False
+        self.proximo_reconocimiento = 0.0
+        self.estado_reconocimiento_label.setText("Cámara cerrada. Reconocimiento detenido.")
 
         self.panel_camara.clear()
 
@@ -1606,6 +1820,8 @@ class MainWindow(QMainWindow):
 
     def ir_jornada(self):
 
+        self.sesion_reconocimiento += 1
+
         # Solo dejamos de dibujar.
         # No cerramos la webcam salvo que se pulse Editar.
         if self.timer_camara.isActive():
@@ -1625,6 +1841,8 @@ class MainWindow(QMainWindow):
         )
 
     def ir_registro_alumno(self):
+
+        self.sesion_reconocimiento += 1
 
         # Cámara permanece encendida.
         if self.timer_camara.isActive():
@@ -1647,17 +1865,22 @@ class MainWindow(QMainWindow):
     # CERRAR PROGRAMA
     # ========================================================
 
-    def closeEvent(
-        self,
-        event
-    ):
+    @Slot()
+    def finalizar_cierre(self):
+        if self.cerrando:
+            self.close()
 
-        if self.timer_camara.isActive():
-
-            self.timer_camara.stop()
-
-        self.camera.cerrar()
-
-        self.camara_abierta = False
-
+    def closeEvent(self, event):
+        self.cerrando = True
+        self.cerrar_camara()
+        if self.hilo_reconocimiento.isRunning():
+            # No destruir ni terminar forzosamente un hilo que aún ejecuta FaceNet.
+            # La ventana sigue atendiendo eventos hasta recibir finished.
+            self.setEnabled(False)
+            self.estado_reconocimiento_label.setText(
+                "Cerrando: esperando que termine el procesamiento actual..."
+            )
+            self.hilo_reconocimiento.quit()
+            event.ignore()
+            return
         event.accept()
