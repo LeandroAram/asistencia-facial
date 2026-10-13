@@ -62,6 +62,7 @@ def validar_usuario(
 ):
 
     conexion = None
+    cursor = None
 
     try:
 
@@ -96,8 +97,6 @@ def validar_usuario(
 
         usuario = cursor.fetchone()
 
-        cursor.close()
-
         return usuario
 
     except Exception as error:
@@ -112,8 +111,10 @@ def validar_usuario(
 
     finally:
 
-        if conexion is not None:
+        if cursor is not None:
+            cursor.close()
 
+        if conexion is not None:
             conexion.close()
 
 
@@ -183,9 +184,7 @@ def registrar_alumno(
             )
         )
 
-        alumno_id = (
-            cursor.fetchone()[0]
-        )
+        alumno_id = cursor.fetchone()[0]
 
         # ----------------------------------------------------
         # INSERTAR LAS TRES FOTOGRAFÍAS
@@ -244,8 +243,7 @@ def registrar_alumno(
         if restriccion == "alumno_dni_unique":
 
             mensaje = (
-                "Ya existe un alumno "
-                "con ese DNI."
+                "Ya existe un alumno con ese DNI."
             )
 
         elif restriccion == (
@@ -253,8 +251,7 @@ def registrar_alumno(
         ):
 
             mensaje = (
-                "Ya existe un alumno "
-                "con ese correo electrónico."
+                "Ya existe un alumno con ese correo electrónico."
             )
 
         elif restriccion == (
@@ -262,25 +259,19 @@ def registrar_alumno(
         ):
 
             mensaje = (
-                "Ya existe un alumno "
-                "con ese número de libreta."
+                "Ya existe un alumno con ese número de libreta."
             )
 
         else:
 
             mensaje = (
-                "Ya existe un alumno "
-                "con alguno de esos datos."
+                "Ya existe un alumno con alguno de esos datos."
             )
 
         return (
             False,
             mensaje
         )
-
-    # ========================================================
-    # OTROS ERRORES
-    # ========================================================
 
     except Exception as error:
 
@@ -296,6 +287,175 @@ def registrar_alumno(
         return (
             False,
             "Ocurrió un error al registrar el alumno."
+        )
+
+    finally:
+
+        if cursor is not None:
+            cursor.close()
+
+        if conexion is not None:
+            conexion.close()
+
+
+# ============================================================
+# CREAR JORNADA
+# ============================================================
+
+def crear_jornada(
+    fecha,
+    horario_entrada,
+    horario_salida,
+    usuario_id,
+    catedra
+):
+
+    conexion = None
+    cursor = None
+
+    try:
+
+        conexion = conectar_bd()
+
+        cursor = conexion.cursor()
+
+        consulta = """
+            INSERT INTO jornada (
+                fecha,
+                horario_entrada,
+                horario_salida,
+                usuario_id,
+                catedra
+            )
+            VALUES (
+                %s,
+                %s,
+                %s,
+                %s,
+                %s
+            )
+            RETURNING id;
+        """
+
+        cursor.execute(
+            consulta,
+            (
+                fecha,
+                horario_entrada,
+                horario_salida,
+                usuario_id,
+                catedra
+            )
+        )
+
+        jornada_id = cursor.fetchone()[0]
+
+        conexion.commit()
+
+        return (
+            True,
+            jornada_id,
+            "Jornada guardada correctamente."
+        )
+
+    except Exception as error:
+
+        if conexion is not None:
+            conexion.rollback()
+
+        print(
+            "Error al crear jornada:"
+        )
+
+        print(error)
+
+        return (
+            False,
+            None,
+            "No se pudo guardar la Jornada."
+        )
+
+    finally:
+
+        if cursor is not None:
+            cursor.close()
+
+        if conexion is not None:
+            conexion.close()
+
+
+# ============================================================
+# ACTUALIZAR JORNADA
+# ============================================================
+
+def actualizar_jornada(
+    jornada_id,
+    fecha,
+    horario_entrada,
+    horario_salida,
+    catedra
+):
+
+    conexion = None
+    cursor = None
+
+    try:
+
+        conexion = conectar_bd()
+
+        cursor = conexion.cursor()
+
+        consulta = """
+            UPDATE jornada
+            SET
+                fecha = %s,
+                horario_entrada = %s,
+                horario_salida = %s,
+                catedra = %s
+            WHERE id = %s;
+        """
+
+        cursor.execute(
+            consulta,
+            (
+                fecha,
+                horario_entrada,
+                horario_salida,
+                catedra,
+                jornada_id
+            )
+        )
+
+        if cursor.rowcount == 0:
+
+            conexion.rollback()
+
+            return (
+                False,
+                "No se encontró la Jornada."
+            )
+
+        conexion.commit()
+
+        return (
+            True,
+            "Jornada actualizada correctamente."
+        )
+
+    except Exception as error:
+
+        if conexion is not None:
+            conexion.rollback()
+
+        print(
+            "Error al actualizar jornada:"
+        )
+
+        print(error)
+
+        return (
+            False,
+            "No se pudo actualizar la Jornada."
         )
 
     finally:

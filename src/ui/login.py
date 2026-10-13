@@ -23,10 +23,6 @@ class LoginWindow(QWidget):
 
         self.ventana_principal = None
 
-        # ====================================================
-        # VENTANA
-        # ====================================================
-
         self.setWindowTitle(
             "Sistema de Asistencia Facial - Iniciar Sesión"
         )
@@ -40,10 +36,6 @@ class LoginWindow(QWidget):
             950,
             620
         )
-
-        # ====================================================
-        # ESTILO GENERAL
-        # ====================================================
 
         self.setStyleSheet("""
             QWidget {
@@ -106,10 +98,6 @@ class LoginWindow(QWidget):
                 background-color: #0e192a;
             }
 
-            QLineEdit::placeholder {
-                color: #64748b;
-            }
-
             QPushButton#loginButton {
                 background-color: #2563eb;
                 color: white;
@@ -124,26 +112,12 @@ class LoginWindow(QWidget):
                 background-color: #3b82f6;
             }
 
-            QPushButton#loginButton:pressed {
-                background-color: #1d4ed8;
-            }
-
             QPushButton#mostrarButton {
                 background-color: transparent;
                 color: #60a5fa;
                 border: none;
                 font-size: 12px;
                 font-weight: 600;
-                padding: 5px;
-            }
-
-            QPushButton#mostrarButton:hover {
-                color: #93c5fd;
-            }
-
-            QLabel#seguridad {
-                color: #64748b;
-                font-size: 11px;
             }
 
             QFrame#loginCard {
@@ -153,13 +127,7 @@ class LoginWindow(QWidget):
             }
         """)
 
-        # ====================================================
-        # LAYOUT PRINCIPAL
-        # ====================================================
-
-        layout_principal = QHBoxLayout(
-            self
-        )
+        layout_principal = QHBoxLayout(self)
 
         layout_principal.setContentsMargins(
             35,
@@ -173,7 +141,7 @@ class LoginWindow(QWidget):
         )
 
         # ====================================================
-        # PANEL IZQUIERDO
+        # IZQUIERDA
         # ====================================================
 
         panel_izquierdo = QFrame()
@@ -197,10 +165,6 @@ class LoginWindow(QWidget):
             55
         )
 
-        # ----------------------------------------------------
-        # LOGO
-        # ----------------------------------------------------
-
         logo = QLabel(
             "◉  FACE CHECK"
         )
@@ -217,10 +181,6 @@ class LoginWindow(QWidget):
             20
         )
 
-        # ----------------------------------------------------
-        # TEXTO PRINCIPAL
-        # ----------------------------------------------------
-
         titulo_sistema = QLabel(
             "Sistema de\nAsistencia Facial"
         )
@@ -232,10 +192,6 @@ class LoginWindow(QWidget):
                 QFont.Bold
             )
         )
-
-        titulo_sistema.setStyleSheet("""
-            color: white;
-        """)
 
         layout_izquierdo.addWidget(
             titulo_sistema
@@ -254,19 +210,11 @@ class LoginWindow(QWidget):
             "descripcion"
         )
 
-        descripcion.setWordWrap(
-            True
-        )
-
         layout_izquierdo.addWidget(
             descripcion
         )
 
         layout_izquierdo.addStretch()
-
-        # ----------------------------------------------------
-        # CARACTERÍSTICAS
-        # ----------------------------------------------------
 
         caracteristicas = QLabel(
             "✓  Captura mediante webcam\n\n"
@@ -278,7 +226,6 @@ class LoginWindow(QWidget):
         caracteristicas.setStyleSheet("""
             color: #e0ecff;
             font-size: 14px;
-            font-weight: 500;
         """)
 
         layout_izquierdo.addWidget(
@@ -287,21 +234,21 @@ class LoginWindow(QWidget):
 
         layout_izquierdo.addStretch()
 
-        pie_izquierdo = QLabel(
+        pie = QLabel(
             "Proyecto de Reconocimiento Visual · 2026"
         )
 
-        pie_izquierdo.setStyleSheet("""
+        pie.setStyleSheet("""
             color: #bfdbfe;
             font-size: 11px;
         """)
 
         layout_izquierdo.addWidget(
-            pie_izquierdo
+            pie
         )
 
         # ====================================================
-        # PANEL DERECHO
+        # DERECHA
         # ====================================================
 
         panel_derecho = QWidget()
@@ -310,18 +257,7 @@ class LoginWindow(QWidget):
             panel_derecho
         )
 
-        layout_derecho.setContentsMargins(
-            25,
-            40,
-            25,
-            40
-        )
-
         layout_derecho.addStretch()
-
-        # ====================================================
-        # TARJETA LOGIN
-        # ====================================================
 
         login_card = QFrame()
 
@@ -348,10 +284,6 @@ class LoginWindow(QWidget):
             12
         )
 
-        # ----------------------------------------------------
-        # ENCABEZADO
-        # ----------------------------------------------------
-
         bienvenida = QLabel(
             "Bienvenido"
         )
@@ -368,10 +300,6 @@ class LoginWindow(QWidget):
             "subtituloLogin"
         )
 
-        subtitulo.setWordWrap(
-            True
-        )
-
         layout_login.addWidget(
             bienvenida
         )
@@ -383,10 +311,6 @@ class LoginWindow(QWidget):
         layout_login.addSpacing(
             25
         )
-
-        # ====================================================
-        # USUARIO
-        # ====================================================
 
         usuario_label = QLabel(
             "Usuario"
@@ -402,10 +326,6 @@ class LoginWindow(QWidget):
             "Usuario, correo, DNI o CUIL"
         )
 
-        self.usuario_input.setClearButtonEnabled(
-            True
-        )
-
         layout_login.addWidget(
             usuario_label
         )
@@ -417,10 +337,6 @@ class LoginWindow(QWidget):
         layout_login.addSpacing(
             10
         )
-
-        # ====================================================
-        # CONTRASEÑA
-        # ====================================================
 
         contrasena_label = QLabel(
             "Contraseña"
@@ -448,14 +364,6 @@ class LoginWindow(QWidget):
             self.contrasena_input
         )
 
-        # ====================================================
-        # MOSTRAR CONTRASEÑA
-        # ====================================================
-
-        layout_mostrar = QHBoxLayout()
-
-        layout_mostrar.addStretch()
-
         self.boton_mostrar = QPushButton(
             "Mostrar contraseña"
         )
@@ -472,21 +380,10 @@ class LoginWindow(QWidget):
             self.alternar_contrasena
         )
 
-        layout_mostrar.addWidget(
-            self.boton_mostrar
+        layout_login.addWidget(
+            self.boton_mostrar,
+            alignment=Qt.AlignRight
         )
-
-        layout_login.addLayout(
-            layout_mostrar
-        )
-
-        layout_login.addSpacing(
-            12
-        )
-
-        # ====================================================
-        # BOTÓN INGRESAR
-        # ====================================================
 
         self.boton_ingresar = QPushButton(
             "Ingresar al sistema  →"
@@ -508,49 +405,12 @@ class LoginWindow(QWidget):
             self.boton_ingresar
         )
 
-        layout_login.addSpacing(
-            15
-        )
-
-        seguridad = QLabel(
-            "🔒  Acceso restringido a usuarios autorizados"
-        )
-
-        seguridad.setObjectName(
-            "seguridad"
-        )
-
-        seguridad.setAlignment(
-            Qt.AlignCenter
-        )
-
-        layout_login.addWidget(
-            seguridad
-        )
-
-        # ====================================================
-        # CENTRAR TARJETA
-        # ====================================================
-
-        contenedor_card = QHBoxLayout()
-
-        contenedor_card.addStretch()
-
-        contenedor_card.addWidget(
-            login_card
-        )
-
-        contenedor_card.addStretch()
-
-        layout_derecho.addLayout(
-            contenedor_card
+        layout_derecho.addWidget(
+            login_card,
+            alignment=Qt.AlignCenter
         )
 
         layout_derecho.addStretch()
-
-        # ====================================================
-        # AGREGAR PANELES
-        # ====================================================
 
         layout_principal.addWidget(
             panel_izquierdo,
@@ -562,10 +422,6 @@ class LoginWindow(QWidget):
             5
         )
 
-        # ====================================================
-        # ENTER
-        # ====================================================
-
         self.usuario_input.returnPressed.connect(
             self.contrasena_input.setFocus
         )
@@ -573,12 +429,6 @@ class LoginWindow(QWidget):
         self.contrasena_input.returnPressed.connect(
             self.iniciar_sesion
         )
-
-        self.usuario_input.setFocus()
-
-    # ========================================================
-    # MOSTRAR / OCULTAR CONTRASEÑA
-    # ========================================================
 
     def alternar_contrasena(self):
 
@@ -602,10 +452,6 @@ class LoginWindow(QWidget):
                 "Mostrar contraseña"
             )
 
-    # ========================================================
-    # LOGIN
-    # ========================================================
-
     def iniciar_sesion(self):
 
         identificador = (
@@ -619,10 +465,6 @@ class LoginWindow(QWidget):
             .text()
         )
 
-        # ----------------------------------------------------
-        # CAMPOS VACÍOS
-        # ----------------------------------------------------
-
         if not identificador or not contrasena:
 
             QMessageBox.warning(
@@ -633,47 +475,24 @@ class LoginWindow(QWidget):
 
             return
 
-        # ----------------------------------------------------
-        # VALIDAR EN BASE DE DATOS
-        # ----------------------------------------------------
-
-        try:
-
-            usuario = validar_usuario(
-                identificador,
-                contrasena
-            )
-
-        except Exception as error:
-
-            QMessageBox.critical(
-                self,
-                "Error de conexión",
-                (
-                    "No se pudo consultar la base de datos.\n\n"
-                    f"{error}"
-                )
-            )
-
-            return
-
-        # ----------------------------------------------------
-        # LOGIN CORRECTO
-        # ----------------------------------------------------
+        usuario = validar_usuario(
+            identificador,
+            contrasena
+        )
 
         if usuario:
 
+            # usuario[0] = ID
+            # usuario[1] = nombre_usuario
+
             self.ventana_principal = MainWindow(
+                usuario[0],
                 usuario[1]
             )
 
             self.ventana_principal.show()
 
             self.close()
-
-        # ----------------------------------------------------
-        # LOGIN INCORRECTO
-        # ----------------------------------------------------
 
         else:
 

@@ -31,13 +31,30 @@ from PySide6.QtGui import (
 from src.ui.registro_alumno import RegistroAlumnoWidget
 from src.camera.camera_manager import CameraManager
 
+from src.database.conexion import (
+    crear_jornada,
+    actualizar_jornada
+)
+
 
 class MainWindow(QMainWindow):
 
-    def __init__(self, nombre_usuario):
+    def __init__(
+        self,
+        usuario_id,
+        nombre_usuario
+    ):
         super().__init__()
 
+        self.usuario_id = usuario_id
         self.nombre_usuario = nombre_usuario
+
+        # ====================================================
+        # ESTADO DE JORNADA
+        # ====================================================
+
+        self.jornada_id = None
+        self.jornada_en_edicion = False
 
         # ====================================================
         # CÁMARA COMPARTIDA
@@ -71,28 +88,33 @@ class MainWindow(QMainWindow):
             750
         )
 
-        # ====================================================
-        # ESTILO GENERAL
-        # ====================================================
-
         self.aplicar_estilos()
 
         # ====================================================
-        # CONTENEDOR PRINCIPAL
+        # CONTENEDOR
         # ====================================================
 
         contenedor = QWidget()
         contenedor.setObjectName("root")
 
-        self.setCentralWidget(contenedor)
-
-        layout_principal = QHBoxLayout(contenedor)
-
-        layout_principal.setContentsMargins(
-            0, 0, 0, 0
+        self.setCentralWidget(
+            contenedor
         )
 
-        layout_principal.setSpacing(0)
+        layout_principal = QHBoxLayout(
+            contenedor
+        )
+
+        layout_principal.setContentsMargins(
+            0,
+            0,
+            0,
+            0
+        )
+
+        layout_principal.setSpacing(
+            0
+        )
 
         # ====================================================
         # SIDEBAR
@@ -113,16 +135,15 @@ class MainWindow(QMainWindow):
         )
 
         layout_sidebar.setContentsMargins(
-            22, 30, 22, 25
+            22,
+            30,
+            22,
+            25
         )
 
         layout_sidebar.setSpacing(
             10
         )
-
-        # ====================================================
-        # LOGO
-        # ====================================================
 
         logo = QLabel(
             "◉  FACE CHECK"
@@ -152,10 +173,6 @@ class MainWindow(QMainWindow):
             35
         )
 
-        # ====================================================
-        # TEXTO MENÚ
-        # ====================================================
-
         menu_label = QLabel(
             "MENÚ PRINCIPAL"
         )
@@ -168,24 +185,26 @@ class MainWindow(QMainWindow):
             menu_label
         )
 
-        layout_sidebar.addSpacing(
-            5
-        )
-
         # ====================================================
-        # BOTONES NAVEGACIÓN
+        # BOTONES MENÚ
         # ====================================================
 
-        self.boton_asistencia = self.crear_boton_menu(
-            "◉   Asistencia Facial"
+        self.boton_asistencia = (
+            self.crear_boton_menu(
+                "◉   Asistencia Facial"
+            )
         )
 
-        self.boton_jornada = self.crear_boton_menu(
-            "◷   Configurar Jornada"
+        self.boton_jornada = (
+            self.crear_boton_menu(
+                "◷   Configurar Jornada"
+            )
         )
 
-        self.boton_alumno = self.crear_boton_menu(
-            "＋   Registrar Alumno"
+        self.boton_alumno = (
+            self.crear_boton_menu(
+                "＋   Registrar Alumno"
+            )
         )
 
         self.grupo_menu = QButtonGroup(
@@ -227,7 +246,7 @@ class MainWindow(QMainWindow):
         layout_sidebar.addStretch()
 
         # ====================================================
-        # USUARIO ABAJO
+        # USUARIO
         # ====================================================
 
         usuario_card = QFrame()
@@ -248,11 +267,11 @@ class MainWindow(QMainWindow):
             "usuarioTitulo"
         )
 
-        nombre_usuario = QLabel(
+        nombre_label = QLabel(
             f"👤  {self.nombre_usuario}"
         )
 
-        nombre_usuario.setObjectName(
+        nombre_label.setObjectName(
             "usuarioNombre"
         )
 
@@ -261,7 +280,7 @@ class MainWindow(QMainWindow):
         )
 
         layout_usuario.addWidget(
-            nombre_usuario
+            nombre_label
         )
 
         layout_sidebar.addWidget(
@@ -269,7 +288,7 @@ class MainWindow(QMainWindow):
         )
 
         # ====================================================
-        # CONTENIDO DERECHO
+        # CONTENIDO
         # ====================================================
 
         contenido = QFrame()
@@ -283,7 +302,10 @@ class MainWindow(QMainWindow):
         )
 
         layout_contenido.setContentsMargins(
-            35, 25, 35, 25
+            35,
+            25,
+            35,
+            25
         )
 
         layout_contenido.setSpacing(
@@ -307,7 +329,7 @@ class MainWindow(QMainWindow):
         )
 
         self.subtitulo_pagina = QLabel(
-            "Controle la cámara y gestione la asistencia en tiempo real."
+            "Controle la cámara y gestione la asistencia."
         )
 
         self.subtitulo_pagina.setObjectName(
@@ -354,24 +376,18 @@ class MainWindow(QMainWindow):
             self.paginas
         )
 
-        # ====================================================
-        # PÁGINA ASISTENCIA
-        # ====================================================
-
         self.crear_pagina_asistencia()
-
-        # ====================================================
-        # PÁGINA JORNADA
-        # ====================================================
 
         self.crear_pagina_jornada()
 
         # ====================================================
-        # PÁGINA REGISTRAR ALUMNO
+        # REGISTRAR ALUMNO
         # ====================================================
 
-        self.pagina_alumno = RegistroAlumnoWidget(
-            self.camera
+        self.pagina_alumno = (
+            RegistroAlumnoWidget(
+                self.camera
+            )
         )
 
         self.paginas.addWidget(
@@ -383,7 +399,7 @@ class MainWindow(QMainWindow):
         )
 
         # ====================================================
-        # AGREGAR SIDEBAR + CONTENIDO
+        # AGREGAR PANELES
         # ====================================================
 
         layout_principal.addWidget(
@@ -411,7 +427,7 @@ class MainWindow(QMainWindow):
         )
 
         # ====================================================
-        # BOTONES CÁMARA
+        # CÁMARA
         # ====================================================
 
         self.boton_abrir_camara.clicked.connect(
@@ -422,11 +438,27 @@ class MainWindow(QMainWindow):
             self.cerrar_camara
         )
 
+        # ====================================================
+        # JORNADA
+        # ====================================================
+
+        self.boton_guardar_jornada.clicked.connect(
+            self.guardar_jornada
+        )
+
+        self.boton_editar_jornada.clicked.connect(
+            self.editar_jornada
+        )
+
+        self.boton_terminar_jornada.clicked.connect(
+            self.terminar_jornada
+        )
+
         self.paginas.setCurrentIndex(
             0
         )
 
-        self.actualizar_estado_camara()
+        self.actualizar_estado_jornada()
 
     # ========================================================
     # ESTILOS
@@ -435,10 +467,6 @@ class MainWindow(QMainWindow):
     def aplicar_estilos(self):
 
         self.setStyleSheet("""
-
-            /* ==============================
-               GENERAL
-            ============================== */
 
             QMainWindow {
                 background-color: #08111f;
@@ -457,18 +485,8 @@ class MainWindow(QMainWindow):
                 font-family: "Segoe UI";
             }
 
-            /* ==============================
-               SIDEBAR
-            ============================== */
-
             QFrame#sidebar {
-                background: qlineargradient(
-                    x1:0, y1:0,
-                    x2:0, y2:1,
-                    stop:0 #0f1e38,
-                    stop:1 #081426
-                );
-
+                background-color: #0f1e38;
                 border-right: 1px solid #21324d;
             }
 
@@ -487,329 +505,174 @@ class MainWindow(QMainWindow):
                 color: #64748b;
                 font-size: 11px;
                 font-weight: bold;
-                letter-spacing: 1px;
             }
 
             QPushButton[nav="true"] {
-
                 background-color: transparent;
-
                 color: #a9b8ce;
-
                 border: none;
-
                 border-radius: 10px;
-
                 text-align: left;
-
                 padding: 13px 16px;
-
                 font-size: 14px;
-
                 font-weight: 600;
             }
 
             QPushButton[nav="true"]:hover {
-
                 background-color: #162742;
-
                 color: white;
             }
 
             QPushButton[nav="true"]:checked {
-
                 background-color: #2563eb;
-
                 color: white;
-
-                border-left: 4px solid #60a5fa;
             }
 
-            /* ==============================
-               USUARIO
-            ============================== */
-
             QFrame#usuarioCard {
-
                 background-color: #101f35;
-
                 border: 1px solid #203652;
-
                 border-radius: 12px;
             }
 
             QLabel#usuarioTitulo {
-
                 color: #64748b;
-
                 font-size: 10px;
-
                 font-weight: bold;
             }
 
             QLabel#usuarioNombre {
-
                 color: white;
-
                 font-size: 14px;
-
                 font-weight: 600;
             }
 
-            /* ==============================
-               HEADER
-            ============================== */
-
             QLabel#tituloPagina {
-
                 color: white;
-
                 font-size: 27px;
-
                 font-weight: 800;
             }
 
             QLabel#subtituloPagina {
-
                 color: #94a3b8;
-
                 font-size: 13px;
             }
 
             QLabel#sistemaActivo {
-
                 color: #34d399;
-
                 background-color: #0c2b28;
-
                 border: 1px solid #145e52;
-
                 border-radius: 12px;
-
                 padding: 7px 12px;
-
                 font-size: 11px;
-
                 font-weight: bold;
             }
 
-            /* ==============================
-               TARJETAS
-            ============================== */
-
             QFrame[card="true"] {
-
                 background-color: #101b2d;
-
                 border: 1px solid #22324a;
-
                 border-radius: 16px;
             }
 
             QLabel[cardTitle="true"] {
-
                 color: #8191a9;
-
                 font-size: 11px;
-
                 font-weight: 700;
             }
 
             QLabel[cardValue="true"] {
-
                 color: white;
-
                 font-size: 17px;
-
                 font-weight: 700;
             }
-
-            /* ==============================
-               CÁMARA
-            ============================== */
 
             QLabel#cameraPanel {
-
                 background-color: #050a12;
-
                 border: 2px solid #243954;
-
                 border-radius: 18px;
-
                 color: #53657d;
-
                 font-size: 17px;
             }
 
-            /* ==============================
-               BOTONES
-            ============================== */
-
-            QPushButton#botonAbrir {
-
+            QPushButton {
                 background-color: #2563eb;
-
                 color: white;
-
                 border: none;
-
                 border-radius: 10px;
-
-                padding: 12px 20px;
-
+                padding: 11px 18px;
                 font-weight: 700;
-
-                font-size: 14px;
-            }
-
-            QPushButton#botonAbrir:hover {
-
-                background-color: #3b82f6;
-            }
-
-            QPushButton#botonCerrar {
-
-                background-color: #b42336;
-
-                color: white;
-
-                border: none;
-
-                border-radius: 10px;
-
-                padding: 12px 20px;
-
-                font-weight: 700;
-
-                font-size: 14px;
-            }
-
-            QPushButton#botonCerrar:hover {
-
-                background-color: #dc3545;
-            }
-
-            QPushButton:disabled {
-
-                background-color: #172235;
-
-                color: #526177;
-
-                border: 1px solid #26364e;
-            }
-
-            /* ==============================
-               CAMPOS
-            ============================== */
-
-            QLineEdit,
-            QDateEdit,
-            QSpinBox {
-
-                background-color: #0a1424;
-
-                color: white;
-
-                border: 1px solid #30425d;
-
-                border-radius: 9px;
-
-                padding: 9px 12px;
-
-                min-height: 24px;
-
                 font-size: 13px;
             }
 
-            QLineEdit:focus,
-            QDateEdit:focus,
-            QSpinBox:focus {
+            QPushButton:hover {
+                background-color: #3b82f6;
+            }
 
+            QPushButton:disabled {
+                background-color: #172235;
+                color: #526177;
+                border: 1px solid #26364e;
+            }
+
+            QPushButton#botonCerrar,
+            QPushButton#botonTerminar {
+                background-color: #b42336;
+            }
+
+            QPushButton#botonEditar {
+                background-color: #d97706;
+            }
+
+            QPushButton#botonGuardar {
+                background-color: #059669;
+            }
+
+            QLineEdit {
+                background-color: #0a1424;
+                color: white;
+                border: 1px solid #30425d;
+                border-radius: 9px;
+                padding: 9px 12px;
+                min-height: 24px;
+                font-size: 13px;
+            }
+
+            QLineEdit:focus {
                 border: 1px solid #3b82f6;
             }
 
-            /* ==============================
-               GROUP BOX REGISTRO
-            ============================== */
+            QLineEdit:disabled {
+                color: #94a3b8;
+                background-color: #111c2d;
+            }
 
             QGroupBox {
-
                 color: #dbeafe;
-
                 background-color: #101b2d;
-
                 border: 1px solid #253650;
-
                 border-radius: 12px;
-
                 margin-top: 16px;
-
                 padding: 18px 12px 12px 12px;
-
-                font-size: 14px;
-
-                font-weight: bold;
             }
-
-            QGroupBox::title {
-
-                subcontrol-origin: margin;
-
-                left: 14px;
-
-                padding: 0 6px;
-
-                color: #60a5fa;
-            }
-
-            /* ==============================
-               SCROLL
-            ============================== */
 
             QScrollArea {
-
                 border: none;
-
                 background: transparent;
-            }
-
-            QScrollArea > QWidget > QWidget {
-
-                background: transparent;
-            }
-
-            QScrollBar:vertical {
-
-                background: #0b1424;
-
-                width: 10px;
-
-                border-radius: 5px;
-            }
-
-            QScrollBar::handle:vertical {
-
-                background: #31435e;
-
-                border-radius: 5px;
-
-                min-height: 30px;
-            }
-
-            QScrollBar::handle:vertical:hover {
-
-                background: #3b82f6;
             }
 
         """)
 
     # ========================================================
-    # CREAR BOTÓN MENÚ
+    # BOTÓN MENÚ
     # ========================================================
 
-    def crear_boton_menu(self, texto):
+    def crear_boton_menu(
+        self,
+        texto
+    ):
 
-        boton = QPushButton(texto)
+        boton = QPushButton(
+            texto
+        )
 
         boton.setProperty(
             "nav",
@@ -827,7 +690,7 @@ class MainWindow(QMainWindow):
         return boton
 
     # ========================================================
-    # CREAR TARJETA DE ESTADO
+    # TARJETA
     # ========================================================
 
     def crear_tarjeta_estado(
@@ -843,16 +706,8 @@ class MainWindow(QMainWindow):
             True
         )
 
-        card.setMinimumHeight(
-            90
-        )
-
         layout = QVBoxLayout(
             card
-        )
-
-        layout.setContentsMargins(
-            18, 14, 18, 14
         )
 
         titulo_label = QLabel(
@@ -881,10 +736,13 @@ class MainWindow(QMainWindow):
             valor_label
         )
 
-        return card, valor_label
+        return (
+            card,
+            valor_label
+        )
 
     # ========================================================
-    # CREAR PÁGINA ASISTENCIA
+    # ASISTENCIA
     # ========================================================
 
     def crear_pagina_asistencia(self):
@@ -895,40 +753,35 @@ class MainWindow(QMainWindow):
             pagina
         )
 
-        layout.setContentsMargins(
-            0, 5, 0, 0
-        )
-
         layout.setSpacing(
             18
         )
 
-        # ====================================================
-        # TARJETAS SUPERIORES
-        # ====================================================
-
         tarjetas = QHBoxLayout()
 
-        card_camara, self.estado_camara_label = (
-            self.crear_tarjeta_estado(
-                "● ESTADO DE CÁMARA",
-                "Apagada"
-            )
+        (
+            card_camara,
+            self.estado_camara_label
+        ) = self.crear_tarjeta_estado(
+            "● ESTADO DE CÁMARA",
+            "Apagada"
         )
 
-        card_jornada, self.estado_jornada_label = (
-            self.crear_tarjeta_estado(
-                "◷ JORNADA",
-                "Sin configurar"
-            )
+        (
+            card_jornada,
+            self.estado_jornada_label
+        ) = self.crear_tarjeta_estado(
+            "◷ JORNADA",
+            "Sin Jornada"
         )
 
-        card_fecha, self.estado_fecha_label = (
-            self.crear_tarjeta_estado(
-                "▣ FECHA",
-                QDate.currentDate().toString(
-                    "dd/MM/yyyy"
-                )
+        (
+            card_fecha,
+            self.estado_fecha_label
+        ) = self.crear_tarjeta_estado(
+            "▣ FECHA",
+            QDate.currentDate().toString(
+                "dd/MM/yyyy"
             )
         )
 
@@ -948,18 +801,10 @@ class MainWindow(QMainWindow):
             tarjetas
         )
 
-        # ====================================================
-        # BOTONES
-        # ====================================================
-
-        layout_botones = QHBoxLayout()
+        botones = QHBoxLayout()
 
         self.boton_abrir_camara = QPushButton(
             "▶  Abrir Cámara"
-        )
-
-        self.boton_abrir_camara.setObjectName(
-            "botonAbrir"
         )
 
         self.boton_cerrar_camara = QPushButton(
@@ -970,33 +815,21 @@ class MainWindow(QMainWindow):
             "botonCerrar"
         )
 
-        self.boton_abrir_camara.setMinimumHeight(
-            48
-        )
+        botones.addStretch()
 
-        self.boton_cerrar_camara.setMinimumHeight(
-            48
-        )
-
-        layout_botones.addStretch()
-
-        layout_botones.addWidget(
+        botones.addWidget(
             self.boton_abrir_camara
         )
 
-        layout_botones.addWidget(
+        botones.addWidget(
             self.boton_cerrar_camara
         )
 
-        layout_botones.addStretch()
+        botones.addStretch()
 
         layout.addLayout(
-            layout_botones
+            botones
         )
-
-        # ====================================================
-        # PANEL CÁMARA GRANDE
-        # ====================================================
 
         self.panel_camara = QLabel(
             "📷\n\nLa cámara aparecerá aquí"
@@ -1010,7 +843,6 @@ class MainWindow(QMainWindow):
             Qt.AlignCenter
         )
 
-        # GRANDE DESDE EL PRINCIPIO
         self.panel_camara.setFixedSize(
             860,
             500
@@ -1028,7 +860,7 @@ class MainWindow(QMainWindow):
         )
 
     # ========================================================
-    # CREAR PÁGINA JORNADA
+    # JORNADA
     # ========================================================
 
     def crear_pagina_jornada(self):
@@ -1040,7 +872,10 @@ class MainWindow(QMainWindow):
         )
 
         layout.setContentsMargins(
-            0, 20, 0, 0
+            0,
+            20,
+            0,
+            0
         )
 
         tarjeta = QFrame()
@@ -1059,7 +894,10 @@ class MainWindow(QMainWindow):
         )
 
         layout_tarjeta.setContentsMargins(
-            35, 30, 35, 35
+            35,
+            30,
+            35,
+            35
         )
 
         layout_tarjeta.setSpacing(
@@ -1070,27 +908,24 @@ class MainWindow(QMainWindow):
             "Configuración de la Jornada"
         )
 
-        titulo.setStyleSheet("""
-            font-size: 22px;
-            font-weight: 800;
-            color: white;
-        """)
-
-        descripcion = QLabel(
-            "Defina los parámetros antes de habilitar la cámara de asistencia."
+        titulo.setStyleSheet(
+            "font-size:22px; font-weight:800;"
         )
 
-        descripcion.setStyleSheet("""
-            color: #94a3b8;
-            font-size: 13px;
-        """)
+        self.estado_jornada_config = QLabel(
+            "● Sin Jornada activa"
+        )
+
+        self.estado_jornada_config.setStyleSheet(
+            "color:#f59e0b; font-weight:bold;"
+        )
 
         layout_tarjeta.addWidget(
             titulo
         )
 
         layout_tarjeta.addWidget(
-            descripcion
+            self.estado_jornada_config
         )
 
         formulario = QFormLayout()
@@ -1099,34 +934,16 @@ class MainWindow(QMainWindow):
             18
         )
 
-        formulario.setHorizontalSpacing(
-            30
-        )
-
-        # ====================================================
-        # FECHA
-        # ====================================================
-
         self.fecha_label = QLabel(
             QDate.currentDate().toString(
                 "dd/MM/yyyy"
             )
         )
 
-        self.fecha_label.setStyleSheet("""
-            font-size: 16px;
-            font-weight: bold;
-            color: #60a5fa;
-        """)
-
         formulario.addRow(
             "Fecha:",
             self.fecha_label
         )
-
-        # ====================================================
-        # HORARIOS
-        # ====================================================
 
         expresion = QRegularExpression(
             r"^([01][0-9]|2[0-3]):[0-5][0-9]$"
@@ -1135,7 +952,7 @@ class MainWindow(QMainWindow):
         self.horario_entrada_input = QLineEdit()
 
         self.horario_entrada_input.setPlaceholderText(
-            "Ej: 08:00"
+            "--:--"
         )
 
         self.horario_entrada_input.setMaxLength(
@@ -1157,7 +974,7 @@ class MainWindow(QMainWindow):
         self.horario_salida_input = QLineEdit()
 
         self.horario_salida_input.setPlaceholderText(
-            "Ej: 12:00"
+            "--:--"
         )
 
         self.horario_salida_input.setMaxLength(
@@ -1179,7 +996,7 @@ class MainWindow(QMainWindow):
         self.catedra_input = QLineEdit()
 
         self.catedra_input.setPlaceholderText(
-            "Ej: Reconocimiento Visual"
+            "Ingrese la cátedra"
         )
 
         formulario.addRow(
@@ -1191,20 +1008,50 @@ class MainWindow(QMainWindow):
             formulario
         )
 
-        aviso = QLabel(
-            "✓ Cuando complete todos los campos, la cámara quedará habilitada automáticamente."
+        # ====================================================
+        # BOTONES JORNADA
+        # ====================================================
+
+        layout_botones = QHBoxLayout()
+
+        self.boton_guardar_jornada = QPushButton(
+            "Guardar Jornada"
         )
 
-        aviso.setStyleSheet("""
-            color: #34d399;
-            background-color: #0c2b28;
-            border: 1px solid #145e52;
-            border-radius: 8px;
-            padding: 10px;
-        """)
+        self.boton_guardar_jornada.setObjectName(
+            "botonGuardar"
+        )
 
-        layout_tarjeta.addWidget(
-            aviso
+        self.boton_editar_jornada = QPushButton(
+            "Editar Jornada"
+        )
+
+        self.boton_editar_jornada.setObjectName(
+            "botonEditar"
+        )
+
+        self.boton_terminar_jornada = QPushButton(
+            "Terminar Jornada"
+        )
+
+        self.boton_terminar_jornada.setObjectName(
+            "botonTerminar"
+        )
+
+        layout_botones.addWidget(
+            self.boton_guardar_jornada
+        )
+
+        layout_botones.addWidget(
+            self.boton_editar_jornada
+        )
+
+        layout_botones.addWidget(
+            self.boton_terminar_jornada
+        )
+
+        layout_tarjeta.addLayout(
+            layout_botones
         )
 
         layout.addWidget(
@@ -1219,93 +1066,26 @@ class MainWindow(QMainWindow):
         )
 
         # ====================================================
-        # DETECTAR CAMBIOS
+        # VALIDACIÓN AUTOMÁTICA
         # ====================================================
 
         self.horario_entrada_input.textChanged.connect(
-            self.actualizar_estado_camara
+            self.actualizar_estado_jornada
         )
 
         self.horario_salida_input.textChanged.connect(
-            self.actualizar_estado_camara
+            self.actualizar_estado_jornada
         )
 
         self.catedra_input.textChanged.connect(
-            self.actualizar_estado_camara
+            self.actualizar_estado_jornada
         )
 
     # ========================================================
-    # NAVEGACIÓN
+    # VALIDAR DATOS DE JORNADA
     # ========================================================
 
-    def ir_asistencia(self):
-
-        self.paginas.setCurrentIndex(
-            0
-        )
-
-        self.titulo_pagina.setText(
-            "Asistencia por Captura Facial"
-        )
-
-        self.subtitulo_pagina.setText(
-            "Controle la cámara y gestione la asistencia en tiempo real."
-        )
-
-        if (
-            self.camara_abierta
-            and self.camera.esta_abierta()
-        ):
-
-            self.timer_camara.start(
-                30
-            )
-
-    def ir_jornada(self):
-
-        # NO cerramos la webcam.
-        # Solo detenemos la visualización.
-        if self.timer_camara.isActive():
-
-            self.timer_camara.stop()
-
-        self.paginas.setCurrentIndex(
-            1
-        )
-
-        self.titulo_pagina.setText(
-            "Configuración de la Jornada"
-        )
-
-        self.subtitulo_pagina.setText(
-            "Configure fecha, horarios y cátedra para la sesión."
-        )
-
-    def ir_registro_alumno(self):
-
-        # IMPORTANTE:
-        # la webcam permanece encendida.
-        if self.timer_camara.isActive():
-
-            self.timer_camara.stop()
-
-        self.paginas.setCurrentIndex(
-            2
-        )
-
-        self.titulo_pagina.setText(
-            "Registrar Alumno"
-        )
-
-        self.subtitulo_pagina.setText(
-            "Complete los datos personales y capture las fotografías del alumno."
-        )
-
-    # ========================================================
-    # JORNADA CONFIGURADA
-    # ========================================================
-
-    def jornada_configurada(self):
+    def datos_jornada_validos(self):
 
         entrada = (
             self.horario_entrada_input
@@ -1343,35 +1123,299 @@ class MainWindow(QMainWindow):
         return True
 
     # ========================================================
-    # ACTUALIZAR ESTADOS
+    # ESTADO JORNADA
+    # ========================================================
+
+    def actualizar_estado_jornada(self):
+
+        datos_validos = (
+            self.datos_jornada_validos()
+        )
+
+        # ----------------------------------------------------
+        # SIN JORNADA
+        # ----------------------------------------------------
+
+        if self.jornada_id is None:
+
+            self.boton_guardar_jornada.setVisible(
+                True
+            )
+
+            self.boton_guardar_jornada.setEnabled(
+                datos_validos
+            )
+
+            self.boton_editar_jornada.setVisible(
+                False
+            )
+
+            self.boton_terminar_jornada.setVisible(
+                False
+            )
+
+            self.estado_jornada_config.setText(
+                "● Sin Jornada activa"
+            )
+
+            self.estado_jornada_config.setStyleSheet(
+                "color:#f59e0b; font-weight:bold;"
+            )
+
+        # ----------------------------------------------------
+        # JORNADA EN EDICIÓN
+        # ----------------------------------------------------
+
+        elif self.jornada_en_edicion:
+
+            self.boton_guardar_jornada.setVisible(
+                True
+            )
+
+            self.boton_guardar_jornada.setEnabled(
+                datos_validos
+            )
+
+            self.boton_editar_jornada.setVisible(
+                False
+            )
+
+            self.boton_terminar_jornada.setVisible(
+                True
+            )
+
+            self.estado_jornada_config.setText(
+                f"✎ Editando Jornada ID {self.jornada_id}"
+            )
+
+            self.estado_jornada_config.setStyleSheet(
+                "color:#f59e0b; font-weight:bold;"
+            )
+
+        # ----------------------------------------------------
+        # JORNADA GUARDADA
+        # ----------------------------------------------------
+
+        else:
+
+            self.boton_guardar_jornada.setVisible(
+                False
+            )
+
+            self.boton_editar_jornada.setVisible(
+                True
+            )
+
+            self.boton_terminar_jornada.setVisible(
+                True
+            )
+
+            self.estado_jornada_config.setText(
+                f"● Jornada guardada · ID {self.jornada_id}"
+            )
+
+            self.estado_jornada_config.setStyleSheet(
+                "color:#34d399; font-weight:bold;"
+            )
+
+        self.actualizar_estado_camara()
+
+    # ========================================================
+    # GUARDAR JORNADA
+    # ========================================================
+
+    def guardar_jornada(self):
+
+        if not self.datos_jornada_validos():
+
+            return
+
+        fecha = QDate.currentDate().toString(
+            "yyyy-MM-dd"
+        )
+
+        entrada = (
+            self.horario_entrada_input
+            .text()
+            .strip()
+        )
+
+        salida = (
+            self.horario_salida_input
+            .text()
+            .strip()
+        )
+
+        catedra = (
+            self.catedra_input
+            .text()
+            .strip()
+        )
+
+        # ====================================================
+        # CREAR NUEVA
+        # ====================================================
+
+        if self.jornada_id is None:
+
+            (
+                exito,
+                jornada_id,
+                mensaje
+            ) = crear_jornada(
+                fecha,
+                entrada,
+                salida,
+                self.usuario_id,
+                catedra
+            )
+
+            if not exito:
+
+                QMessageBox.critical(
+                    self,
+                    "Error",
+                    mensaje
+                )
+
+                return
+
+            self.jornada_id = (
+                jornada_id
+            )
+
+        # ====================================================
+        # ACTUALIZAR EXISTENTE
+        # ====================================================
+
+        else:
+
+            (
+                exito,
+                mensaje
+            ) = actualizar_jornada(
+                self.jornada_id,
+                fecha,
+                entrada,
+                salida,
+                catedra
+            )
+
+            if not exito:
+
+                QMessageBox.critical(
+                    self,
+                    "Error",
+                    mensaje
+                )
+
+                return
+
+        self.jornada_en_edicion = False
+
+        self.horario_entrada_input.setEnabled(
+            False
+        )
+
+        self.horario_salida_input.setEnabled(
+            False
+        )
+
+        self.catedra_input.setEnabled(
+            False
+        )
+
+        self.actualizar_estado_jornada()
+
+        QMessageBox.information(
+            self,
+            "Jornada",
+            (
+                "Jornada guardada correctamente.\n\n"
+                f"ID de Jornada: {self.jornada_id}"
+            )
+        )
+
+    # ========================================================
+    # EDITAR JORNADA
+    # ========================================================
+
+    def editar_jornada(self):
+
+        # Requisito del profesor:
+        # si cámara está abierta, cerrarla.
+        if self.camara_abierta:
+
+            self.cerrar_camara()
+
+        self.jornada_en_edicion = True
+
+        self.horario_entrada_input.setEnabled(
+            True
+        )
+
+        self.horario_salida_input.setEnabled(
+            True
+        )
+
+        self.catedra_input.setEnabled(
+            True
+        )
+
+        self.actualizar_estado_jornada()
+
+    # ========================================================
+    # TERMINAR JORNADA
+    # ========================================================
+
+    def terminar_jornada(self):
+
+        if self.camara_abierta:
+
+            self.cerrar_camara()
+
+        # IMPORTANTE:
+        # No se elimina nada de PostgreSQL.
+        self.jornada_id = None
+
+        self.jornada_en_edicion = False
+
+        self.horario_entrada_input.setEnabled(
+            True
+        )
+
+        self.horario_salida_input.setEnabled(
+            True
+        )
+
+        self.catedra_input.setEnabled(
+            True
+        )
+
+        self.horario_entrada_input.clear()
+        self.horario_salida_input.clear()
+        self.catedra_input.clear()
+
+        self.actualizar_estado_jornada()
+
+    # ========================================================
+    # CÁMARA HABILITADA
+    # ========================================================
+
+    def puede_abrir_camara(self):
+
+        return (
+            self.jornada_id is not None
+            and not self.jornada_en_edicion
+        )
+
+    # ========================================================
+    # ESTADO CÁMARA
     # ========================================================
 
     def actualizar_estado_camara(self):
 
-        if self.jornada_configurada():
-
-            self.estado_jornada_label.setText(
-                "Configurada ✓"
-            )
-
-            self.estado_jornada_label.setStyleSheet(
-                "color: #34d399;"
-            )
-
-        else:
-
-            self.estado_jornada_label.setText(
-                "Sin configurar"
-            )
-
-            self.estado_jornada_label.setStyleSheet(
-                "color: #f59e0b;"
-            )
-
-        if not self.jornada_configurada():
-
-            if self.camara_abierta:
-                self.cerrar_camara()
+        if not self.puede_abrir_camara():
 
             self.boton_abrir_camara.setEnabled(
                 False
@@ -1385,11 +1429,17 @@ class MainWindow(QMainWindow):
                 "Apagada"
             )
 
-            self.estado_camara_label.setStyleSheet(
-                "color: #94a3b8;"
+            self.estado_jornada_label.setText(
+                "Sin Jornada guardada"
+                if self.jornada_id is None
+                else "Jornada en edición"
             )
 
             return
+
+        self.estado_jornada_label.setText(
+            f"Guardada · ID {self.jornada_id}"
+        )
 
         if self.camara_abierta:
 
@@ -1403,10 +1453,6 @@ class MainWindow(QMainWindow):
 
             self.estado_camara_label.setText(
                 "Activa ●"
-            )
-
-            self.estado_camara_label.setStyleSheet(
-                "color: #34d399;"
             )
 
         else:
@@ -1423,22 +1469,21 @@ class MainWindow(QMainWindow):
                 "Lista para iniciar"
             )
 
-            self.estado_camara_label.setStyleSheet(
-                "color: #60a5fa;"
-            )
-
     # ========================================================
     # ABRIR CÁMARA
     # ========================================================
 
     def abrir_camara(self):
 
-        if not self.jornada_configurada():
+        if not self.puede_abrir_camara():
 
             QMessageBox.warning(
                 self,
-                "Jornada no configurada",
-                "Debe configurar primero la Jornada."
+                "Jornada requerida",
+                (
+                    "Debe guardar una Jornada "
+                    "antes de abrir la cámara."
+                )
             )
 
             return
@@ -1447,7 +1492,7 @@ class MainWindow(QMainWindow):
 
             QMessageBox.critical(
                 self,
-                "Error de cámara",
+                "Error",
                 "No se pudo abrir la webcam."
             )
 
@@ -1472,7 +1517,6 @@ class MainWindow(QMainWindow):
         if frame is None:
             return
 
-        # MODO ESPEJO
         frame = cv2.flip(
             frame,
             1
@@ -1534,10 +1578,79 @@ class MainWindow(QMainWindow):
         self.actualizar_estado_camara()
 
     # ========================================================
-    # CERRAR APLICACIÓN
+    # NAVEGACIÓN
     # ========================================================
 
-    def closeEvent(self, event):
+    def ir_asistencia(self):
+
+        self.paginas.setCurrentIndex(
+            0
+        )
+
+        self.titulo_pagina.setText(
+            "Asistencia por Captura Facial"
+        )
+
+        self.subtitulo_pagina.setText(
+            "Reconocimiento y registro automático de asistencia."
+        )
+
+        if (
+            self.camara_abierta
+            and self.camera.esta_abierta()
+        ):
+
+            self.timer_camara.start(
+                30
+            )
+
+    def ir_jornada(self):
+
+        # Solo dejamos de dibujar.
+        # No cerramos la webcam salvo que se pulse Editar.
+        if self.timer_camara.isActive():
+
+            self.timer_camara.stop()
+
+        self.paginas.setCurrentIndex(
+            1
+        )
+
+        self.titulo_pagina.setText(
+            "Configuración de la Jornada"
+        )
+
+        self.subtitulo_pagina.setText(
+            "Cree, edite o termine una Jornada."
+        )
+
+    def ir_registro_alumno(self):
+
+        # Cámara permanece encendida.
+        if self.timer_camara.isActive():
+
+            self.timer_camara.stop()
+
+        self.paginas.setCurrentIndex(
+            2
+        )
+
+        self.titulo_pagina.setText(
+            "Registrar Alumno"
+        )
+
+        self.subtitulo_pagina.setText(
+            "Complete los datos y fotografías del alumno."
+        )
+
+    # ========================================================
+    # CERRAR PROGRAMA
+    # ========================================================
+
+    def closeEvent(
+        self,
+        event
+    ):
 
         if self.timer_camara.isActive():
 
