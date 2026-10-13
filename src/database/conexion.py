@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from datetime import datetime, timedelta
 
 import psycopg2
 
@@ -29,26 +30,11 @@ load_dotenv(
 def conectar_bd():
 
     return psycopg2.connect(
-
-        host=os.getenv(
-            "POSTGRES_HOST"
-        ),
-
-        port=os.getenv(
-            "POSTGRES_PORT"
-        ),
-
-        dbname=os.getenv(
-            "POSTGRES_DB"
-        ),
-
-        user=os.getenv(
-            "POSTGRES_USER"
-        ),
-
-        password=os.getenv(
-            "POSTGRES_PASSWORD"
-        )
+        host=os.getenv("POSTGRES_HOST"),
+        port=os.getenv("POSTGRES_PORT"),
+        dbname=os.getenv("POSTGRES_DB"),
+        user=os.getenv("POSTGRES_USER"),
+        password=os.getenv("POSTGRES_PASSWORD")
     )
 
 
@@ -67,7 +53,6 @@ def validar_usuario(
     try:
 
         conexion = conectar_bd()
-
         cursor = conexion.cursor()
 
         consulta = """
@@ -95,9 +80,7 @@ def validar_usuario(
             )
         )
 
-        usuario = cursor.fetchone()
-
-        return usuario
+        return cursor.fetchone()
 
     except Exception as error:
 
@@ -133,12 +116,7 @@ def registrar_alumno(
     try:
 
         conexion = conectar_bd()
-
         cursor = conexion.cursor()
-
-        # ----------------------------------------------------
-        # INSERTAR DATOS DEL ALUMNO
-        # ----------------------------------------------------
 
         consulta_alumno = """
             INSERT INTO alumno (
@@ -186,10 +164,6 @@ def registrar_alumno(
 
         alumno_id = cursor.fetchone()[0]
 
-        # ----------------------------------------------------
-        # INSERTAR LAS TRES FOTOGRAFÍAS
-        # ----------------------------------------------------
-
         consulta_foto = """
             INSERT INTO foto_alumno (
                 alumno_id,
@@ -226,10 +200,6 @@ def registrar_alumno(
             True,
             "Alumno registrado exitosamente."
         )
-
-    # ========================================================
-    # CAMPOS UNIQUE
-    # ========================================================
 
     except errors.UniqueViolation as error:
 
@@ -316,7 +286,6 @@ def crear_jornada(
     try:
 
         conexion = conectar_bd()
-
         cursor = conexion.cursor()
 
         consulta = """
@@ -402,7 +371,6 @@ def actualizar_jornada(
     try:
 
         conexion = conectar_bd()
-
         cursor = conexion.cursor()
 
         consulta = """
@@ -468,7 +436,203 @@ def actualizar_jornada(
 
 
 # ============================================================
-# PRUEBA DIRECTA DE CONEXIÓN
+# PROCESAR ASISTENCIA
+# ============================================================
+
+def procesar_asistencia(
+    alumno_id,
+    jornada_id
+):
+
+    conexion = None
+    cursor = None
+
+    try:
+
+        conexion = conectar_bd()
+        cursor = conexion.cursor()
+
+        # ====================================================
+        # OBTENER DATOS DE LA JORNADA
+        # ====================================================
+
+        cursor.execute(
+            """
+            SELECT
+                fecha,
+                horario_salida
+            FROM jornada
+            WHERE id = %s;
+            """,
+            (
+                jornada_id,
+            )
+        )
+
+        jornada = cursor.fetchone()
+
+        if jornada is None:
+
+            return (
+                False,
+                "Jornada no encontrada."
+            )
+
+        fecha_jornada = jornada[0]
+        horario_salida = jornada[1]
+
+        # ====================================================
+        # BUSCAR ASISTENCIA EXISTENTE
+        # ====================================================
+
+        cursor.execute(
+            """
+            SELECT
+                id,
+                entrada,
+                salida
+            FROM asistencia
+            WHERE
+                jornada_id = %s
+                AND alumno_id = %s;
+            """,
+            (
+                jornada_id,
+                alumno_id
+            )
+        )
+
+        asistencia = cursor.fetchone()
+
+        ahora = datetime.now()
+
+        # ====================================================
+        # PRIMER RECONOCIMIENTO -> ENTRADA
+        # ====================================================
+
+        if asistencia is None:
+
+            cursor.execute(
+                """
+                INSERT INTO asistencia (
+                    alumno_id,
+                    jornada_id,
+                    entrada,
+                    salida
+                )
+                VALUES (
+                    %s,
+                    %s,
+                    %s,
+                    NULL
+                );
+                """,
+                (
+                    alumno_id,
+                    jornada_id,
+                    ahora
+                )
+            )
+
+            conexion.commit()
+
+            return (
+                True,
+                "entrada_registrada"
+            )
+
+        asistencia_id = asistencia[0]
+        entrada = asistencia[1]
+        salida = asistencia[2]
+
+        # ====================================================
+        # YA TIENE ENTRADA Y SALIDA
+        # ====================================================
+
+        if salida is not None:
+
+            return (
+                True,
+                "asistencia_completa"
+            )
+
+        # ====================================================
+        # CALCULAR TOLERANCIA DE SALIDA
+        # ====================================================
+
+        fecha_hora_salida = datetime.combine(
+            fecha_jornada,
+            horario_salida
+        )
+
+        primera_salida_permitida = (
+            fecha_hora_salida
+            - timedelta(
+                minutes=5
+            )
+        )
+
+        # ====================================================
+        # TODAVÍA NO PUEDE SALIR
+        # ====================================================
+
+        if ahora < primera_salida_permitida:
+
+            return (
+                True,
+                "salida_no_habilitada"
+            )
+
+        # ====================================================
+        # REGISTRAR SALIDA
+        # ====================================================
+
+        cursor.execute(
+            """
+            UPDATE asistencia
+            SET salida = %s
+            WHERE id = %s;
+            """,
+            (
+                ahora,
+                asistencia_id
+            )
+        )
+
+        conexion.commit()
+
+        return (
+            True,
+            "salida_registrada"
+        )
+
+    except Exception as error:
+
+        if conexion is not None:
+            conexion.rollback()
+
+        print(
+            "Error al procesar asistencia:"
+        )
+
+        print(error)
+
+        return (
+            False,
+            "error"
+        )
+
+    finally:
+
+        if cursor is not None:
+            cursor.close()
+
+        if conexion is not None:
+            conexion.close()
+
+
+# ============================================================
+# PRUEBA DIRECTA
 # ============================================================
 
 if __name__ == "__main__":
@@ -479,7 +643,6 @@ if __name__ == "__main__":
     try:
 
         conexion = conectar_bd()
-
         cursor = conexion.cursor()
 
         cursor.execute(
