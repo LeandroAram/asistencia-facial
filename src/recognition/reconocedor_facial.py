@@ -1,5 +1,16 @@
+import hashlib
+import json
+from pathlib import Path
+from importlib.metadata import version
+
 import cv2
 import numpy as np
+
+# Evitar que TensorFlow ocupe todos los núcleos mientras la UI muestra video.
+import os
+os.environ.setdefault("TF_NUM_INTRAOP_THREADS", "2")
+os.environ.setdefault("TF_NUM_INTEROP_THREADS", "1")
+os.environ.setdefault("OMP_NUM_THREADS", "2")
 
 from deepface import DeepFace
 
@@ -122,155 +133,80 @@ class ReconocedorFacial:
     # ========================================================
 
     def cargar_referencias(self):
-
-        conexion = None
-        cursor = None
-
-        self.referencias = []
-
+        # Caché local derivada: nunca se guarda en Git ni reemplaza a PostgreSQL.
+        ruta = Path(__file__).resolve().parents[2] / ".cache" / "facial" / "referencias.json"
+        firma = f"haar80-skip-v1:{version('deepface')}:{cv2.__version__}:Facenet512"
+        cache = {}
         try:
-
+            almacen = json.loads(ruta.read_text(encoding="utf-8"))
+            if almacen.get("firma") == firma:
+                cache = almacen.get("embeddings", {})
+        except (OSError, ValueError, TypeError, AttributeError):
+            pass
+        nuevos = {}
+        referencias = []
+        conexion = None
+        reutilizadas = 0
+        try:
             conexion = conectar_bd()
-
-            cursor = conexion.cursor()
-
-            cursor.execute(
-                """
-                SELECT
-                    f.id,
-                    f.alumno_id,
-                    a.nombre,
-                    a.apellido,
-                    f.angulo,
-                    f.imagen
-                FROM foto_alumno AS f
-                INNER JOIN alumno AS a
-                    ON a.id = f.alumno_id
-                ORDER BY
-                    f.alumno_id,
-                    f.id;
-                """
-            )
-
-            registros = cursor.fetchall()
-
-            for registro in registros:
-
-                foto_id = registro[0]
-                alumno_id = registro[1]
-                nombre = registro[2]
-                apellido = registro[3]
-                angulo = registro[4]
-                imagen_bytes = registro[5]
-
-                # --------------------------------------------
-                # BYTEA -> OPENCV
-                # --------------------------------------------
-
-                buffer = np.frombuffer(
-                    bytes(imagen_bytes),
-                    dtype=np.uint8
-                )
-
-                imagen = cv2.imdecode(
-                    buffer,
-                    cv2.IMREAD_COLOR
-                )
-
-                if imagen is None:
-
-                    print(
-                        f"Foto {foto_id}: imagen inválida."
-                    )
-
-                    continue
-
-                # --------------------------------------------
-                # DETECTAR EXACTAMENTE UN ROSTRO
-                # --------------------------------------------
-
-                rostros = self.detectar_rostros(
-                    imagen
-                )
-
-                if len(rostros) != 1:
-
-                    print(
-                        f"Foto {foto_id} "
-                        f"({nombre} {apellido} - {angulo}): "
-                        f"omitida porque detectó "
-                        f"{len(rostros)} rostros."
-                    )
-
-                    continue
-
-                x, y, w, h = rostros[0]
-
-                rostro = imagen[
-                    y:y + h,
-                    x:x + w
-                ]
-
-                # --------------------------------------------
-                # EMBEDDING FACENET512
-                # --------------------------------------------
-
-                embedding = self.generar_embedding(
-                    rostro
-                )
-
-                if embedding is None:
-
-                    print(
-                        f"Foto {foto_id}: "
-                        "no se pudo generar embedding."
-                    )
-
-                    continue
-
-                self.referencias.append(
-                    {
-                        "foto_id": foto_id,
-                        "alumno_id": alumno_id,
-                        "nombre": nombre,
-                        "apellido": apellido,
-                        "angulo": angulo,
-                        "embedding": embedding
-                    }
-                )
-
-                print(
-                    f"Referencia cargada: "
-                    f"{nombre} {apellido} "
-                    f"({angulo})"
-                )
-
-            print(
-                f"\nTotal de referencias válidas: "
-                f"{len(self.referencias)}"
-            )
-
-            return len(
-                self.referencias
-            )
-
-        except Exception as error:
-
-            print(
-                "Error cargando referencias:"
-            )
-
-            print(error)
-
-            return 0
-
+            # Una foto por vez: no cargar todas las imágenes en RAM con fetchall.
+            with conexion.cursor(name="referencias_faciales") as cursor:
+                cursor.itersize = 1
+                cursor.execute("""
+                    SELECT f.id, f.alumno_id, a.nombre, a.apellido, f.angulo, f.imagen
+                    FROM foto_alumno f INNER JOIN alumno a ON a.id=f.alumno_id
+                    ORDER BY f.alumno_id, f.id
+                """)
+                for foto_id, alumno_id, nombre, apellido, angulo, datos in cursor:
+                    clave = hashlib.sha256(bytes(datos)).hexdigest()
+                    embedding = None
+                    if clave in cache:
+                        if cache[clave] is None:
+                            nuevos[clave] = None
+                            continue
+                        try:
+                            candidato = np.asarray(cache[clave], dtype=np.float32)
+                            if candidato.shape == (512,) and np.isfinite(candidato).all():
+                                embedding = candidato
+                                reutilizadas += 1
+                        except (ValueError, TypeError):
+                            pass
+                    if embedding is None:
+                        imagen = cv2.imdecode(np.frombuffer(bytes(datos), dtype=np.uint8), cv2.IMREAD_COLOR)
+                        if imagen is None:
+                            nuevos[clave] = None
+                            continue
+                        rostros = self.detectar_rostros(imagen)
+                        if len(rostros) != 1:
+                            nuevos[clave] = None
+                            continue
+                        x, y, w, h = rostros[0]
+                        embedding = self.generar_embedding(imagen[y:y+h, x:x+w])
+                        del imagen
+                        if embedding is None:
+                            continue
+                    nuevos[clave] = embedding.tolist()
+                    referencias.append({
+                        "foto_id": foto_id, "alumno_id": alumno_id,
+                        "nombre": nombre, "apellido": apellido, "angulo": angulo,
+                        "embedding": embedding,
+                    })
+            self.referencias = referencias
+        except Exception:
+            self.referencias = []
+            raise
         finally:
-
-            if cursor is not None:
-                cursor.close()
-
             if conexion is not None:
                 conexion.close()
+        try:
+            ruta.parent.mkdir(parents=True, exist_ok=True)
+            temporal = ruta.with_name(f"referencias.{os.getpid()}.tmp")
+            temporal.write_text(json.dumps({"firma": firma, "embeddings": nuevos}), encoding="utf-8")
+            temporal.replace(ruta)
+        except OSError as error:
+            print("No se pudo guardar la caché de referencias:", error)
+        print(f"Referencias válidas: {len(referencias)}; reutilizadas: {reutilizadas}")
+        return len(referencias)
 
     # ========================================================
     # DISTANCIA COSENO

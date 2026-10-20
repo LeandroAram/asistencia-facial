@@ -15,3 +15,5 @@ __pycache__/
 # Sistema operativo
 .DS_Store
 Thumbs.db
+# Embeddings derivados locales (no versionar datos biométricos)
+.cache/

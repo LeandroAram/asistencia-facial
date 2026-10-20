@@ -8,7 +8,6 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QFileDialog,
     QMessageBox,
-    QDateEdit,
     QSpinBox,
     QScrollArea,
     QGroupBox
@@ -19,6 +18,7 @@ from PySide6.QtGui import QPixmap
 
 from src.database.conexion import registrar_alumno
 from src.ui.captura_foto import CapturaFotoDialog
+from src.ui.fecha_input import FechaInput
 
 
 class FotoAnguloWidget(QGroupBox):
@@ -379,33 +379,8 @@ class RegistroAlumnoWidget(QWidget):
         # FECHA
         # ====================================================
 
-        self.fecha_nacimiento_input = QDateEdit()
-
-        self.fecha_nacimiento_input.setCalendarPopup(
-            True
-        )
-
-        self.fecha_nacimiento_input.setDisplayFormat(
-            "dd/MM/yyyy"
-        )
-
-        self.fecha_minima = QDate(
-            1900,
-            1,
-            1
-        )
-
-        self.fecha_nacimiento_input.setMinimumDate(
-            self.fecha_minima
-        )
-
-        self.fecha_nacimiento_input.setSpecialValueText(
-            "--/--/----"
-        )
-
-        self.fecha_nacimiento_input.setDate(
-            self.fecha_minima
-        )
+        self.fecha_nacimiento_input = FechaInput()
+        self.fecha_minima = QDate(1900, 1, 1)
 
         formulario.addRow(
             "Fecha de nacimiento:",
@@ -561,7 +536,7 @@ class RegistroAlumnoWidget(QWidget):
 
         if (
             not all(campos)
-            or fecha == self.fecha_minima
+            or not self.fecha_nacimiento_input.hasAcceptableInput()
             or anio_ingreso == 0
             or frontal is None
             or izquierda is None
@@ -574,6 +549,14 @@ class RegistroAlumnoWidget(QWidget):
                 "Debe completar todos los datos y las tres fotografías."
             )
 
+            return
+
+        if not fecha.isValid() or fecha < self.fecha_minima or fecha > QDate.currentDate():
+            QMessageBox.warning(
+                self, "Fecha inválida",
+                "Escriba una fecha de nacimiento válida (día/mes/año), desde 1900 y no futura."
+            )
+            self.fecha_nacimiento_input.setFocus()
             return
 
         datos = {
@@ -636,9 +619,7 @@ class RegistroAlumnoWidget(QWidget):
         self.domicilio_input.clear()
         self.libreta_input.clear()
 
-        self.fecha_nacimiento_input.setDate(
-            self.fecha_minima
-        )
+        self.fecha_nacimiento_input.clear()
 
         self.anio_ingreso_input.setValue(
             0

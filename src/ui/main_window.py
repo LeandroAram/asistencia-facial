@@ -1,5 +1,6 @@
 import cv2
 from time import monotonic
+from threading import Event
 
 from PySide6.QtWidgets import (
     QMainWindow,
@@ -19,7 +20,6 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import (
     Qt,
     QDate,
-    QRegularExpression,
     QTimer,
     QThread,
     Signal,
@@ -27,25 +27,26 @@ from PySide6.QtCore import (
 )
 
 from PySide6.QtGui import (
-    QRegularExpressionValidator,
     QImage,
     QPixmap
 )
 
 from src.ui.registro_alumno import RegistroAlumnoWidget
+from src.ui.exportar_informes import ExportarInformesWidget
+from src.ui.fecha_input import HorarioInput
 from src.camera.camera_manager import CameraManager
 from src.recognition.trabajador_reconocimiento import TrabajadorReconocimiento
 
 from src.database.conexion import (
     crear_jornada,
-    actualizar_jornada,
-    procesar_asistencia
+    actualizar_jornada
 )
 
 
 class MainWindow(QMainWindow):
 
     solicitar_reconocimiento = Signal(object)
+    solicitar_cierre_motor = Signal()
 
     def __init__(
         self,
@@ -71,6 +72,11 @@ class MainWindow(QMainWindow):
         self.camara_abierta = False
 
         self.camera = CameraManager()
+        cv2.setNumThreads(1)
+        self.cancelacion_trabajo = Event()
+        self.tipo_trabajo = None
+        self.error_motor = None
+        self.mensaje_carga = "Cargando reconocimiento y fotografías de referencia..."
 
         # La UI lee la cámara; un único trabajador ejecuta FaceNet.
         self.detector_asistencia = None
@@ -97,6 +103,9 @@ class MainWindow(QMainWindow):
             self.trabajador_reconocimiento.deleteLater
         )
         self.hilo_reconocimiento.finished.connect(self.finalizar_cierre)
+        self.solicitar_cierre_motor.connect(self.trabajador_reconocimiento.detener, Qt.QueuedConnection)
+        self.trabajador_reconocimiento.detenido.connect(self.hilo_reconocimiento.quit)
+        self.trabajador_reconocimiento.progreso.connect(self.mostrar_progreso_motor, Qt.QueuedConnection)
 
         self.timer_camara = QTimer(self)
 
@@ -277,6 +286,10 @@ class MainWindow(QMainWindow):
             self.boton_alumno
         )
 
+        self.boton_informes = self.crear_boton_menu("Exportar Informes")
+        self.grupo_menu.addButton(self.boton_informes)
+        layout_sidebar.addWidget(self.boton_informes)
+        self.boton_informes.clicked.connect(self.ir_informes)
         layout_sidebar.addStretch()
 
         # ====================================================
@@ -427,6 +440,9 @@ class MainWindow(QMainWindow):
         self.paginas.addWidget(
             self.pagina_alumno
         )
+
+        self.pagina_informes = ExportarInformesWidget(self.usuario_id)
+        self.paginas.addWidget(self.pagina_informes)
 
         self.pagina_alumno.alumno_registrado.connect(
             self.cerrar_camara
@@ -986,53 +1002,10 @@ class MainWindow(QMainWindow):
             self.fecha_label
         )
 
-        expresion = QRegularExpression(
-            r"^([01][0-9]|2[0-3]):[0-5][0-9]$"
-        )
-
-        self.horario_entrada_input = QLineEdit()
-
-        self.horario_entrada_input.setPlaceholderText(
-            "--:--"
-        )
-
-        self.horario_entrada_input.setMaxLength(
-            5
-        )
-
-        self.horario_entrada_input.setValidator(
-            QRegularExpressionValidator(
-                expresion,
-                self
-            )
-        )
-
-        formulario.addRow(
-            "Horario de entrada:",
-            self.horario_entrada_input
-        )
-
-        self.horario_salida_input = QLineEdit()
-
-        self.horario_salida_input.setPlaceholderText(
-            "--:--"
-        )
-
-        self.horario_salida_input.setMaxLength(
-            5
-        )
-
-        self.horario_salida_input.setValidator(
-            QRegularExpressionValidator(
-                expresion,
-                self
-            )
-        )
-
-        formulario.addRow(
-            "Horario de salida:",
-            self.horario_salida_input
-        )
+        self.horario_entrada_input = HorarioInput()
+        formulario.addRow("Horario de entrada:", self.horario_entrada_input)
+        self.horario_salida_input = HorarioInput()
+        formulario.addRow("Horario de salida:", self.horario_salida_input)
 
         self.catedra_input = QLineEdit()
 
@@ -1566,7 +1539,7 @@ class MainWindow(QMainWindow):
         frame = self.camera.leer_frame()
 
         if frame is None:
-            self.sesion_reconocimiento += 1
+            self.invalidar_reconocimiento()
             self.estado_reconocimiento_label.setText(
                 "No se pudo leer la cámara. Cierre y vuelva a abrirla."
             )
@@ -1619,9 +1592,21 @@ class MainWindow(QMainWindow):
     # CERRAR CÁMARA
     # ========================================================
 
-    def preparar_reconocimiento(self):
-        self.referencias_listas = False
+    def invalidar_reconocimiento(self):
         self.sesion_reconocimiento += 1
+        self.cancelacion_trabajo.set()
+
+    @Slot(str)
+    def mostrar_progreso_motor(self, mensaje):
+        self.mensaje_carga = mensaje
+        if not self.cerrando and self.camara_abierta and self.paginas.currentIndex() == 0:
+            self.estado_reconocimiento_label.setText(mensaje)
+
+    def preparar_reconocimiento(self):
+        self.error_motor = None
+        self.mensaje_carga = "Cargando reconocimiento y fotografías de referencia..."
+        self.referencias_listas = False
+        self.invalidar_reconocimiento()
         self.estado_reconocimiento_label.setText(
             "Cargando reconocimiento y fotografías de referencia..."
         )
@@ -1647,11 +1632,15 @@ class MainWindow(QMainWindow):
                 "No se pudo iniciar el reconocimiento. Vuelva a abrir la cámara."
             )
 
-    def enviar_trabajo(self, tipo, frame=None, rostros=None):
+    def enviar_trabajo(self, tipo, frame=None, rostros=None, resultado=None):
         if self.procesando_reconocimiento or self.cerrando:
             return
         self.procesando_reconocimiento = True
+        self.tipo_trabajo = tipo
+        self.cancelacion_trabajo = Event()
         self.solicitar_reconocimiento.emit({
+            "cancelacion": self.cancelacion_trabajo,
+            "resultado": resultado,
             "tipo": tipo,
             "sesion": self.sesion_reconocimiento,
             "jornada_id": self.jornada_id,
@@ -1671,33 +1660,40 @@ class MainWindow(QMainWindow):
             return []
         try:
             # Detector exclusivo de la UI: no se comparte con la carga de fotos.
-            gris = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            # Acotar el coste de Haar incluso con webcams de alta resolución.
+            escala = min(1.0, 640.0 / max(frame.shape[:2]))
+            deteccion = cv2.resize(frame, None, fx=escala, fy=escala) if escala < 1 else frame
+            gris = cv2.cvtColor(deteccion, cv2.COLOR_BGR2GRAY)
+            minimo = max(1, round(80 * escala))
             rostros = self.detector_asistencia.detectMultiScale(
-                gris, scaleFactor=1.1, minNeighbors=5, minSize=(80, 80)
+                gris, scaleFactor=1.1, minNeighbors=5, minSize=(minimo, minimo)
             )
+            if len(rostros) and escala < 1:
+                rostros = (rostros / escala).round().astype(int)
             if len(rostros) != 1:
                 # Si la escena deja de ser válida, descartar también el resultado pendiente.
-                self.sesion_reconocimiento += 1
+                self.invalidar_reconocimiento()
                 self.estado_reconocimiento_label.setText(
                     "Sin rostro. Mire a la cámara." if len(rostros) == 0 else
                     "Hay varios rostros. Debe quedar una sola persona."
                 )
             elif self.procesando_reconocimiento:
                 self.estado_reconocimiento_label.setText(
+                    "Guardando asistencia..." if self.tipo_trabajo == "asistencia" else
                     "Reconociendo rostro..." if self.referencias_listas else
-                    "Cargando reconocimiento y fotografías de referencia..."
+                    self.mensaje_carga
                 )
             elif self.referencias_listas and monotonic() >= self.proximo_reconocimiento:
                 self.estado_reconocimiento_label.setText("Reconociendo rostro...")
                 self.enviar_trabajo("reconocer", frame, rostros)
             elif not self.referencias_listas:
                 self.estado_reconocimiento_label.setText(
-                    "Sin referencias disponibles. Revise las fotos y la conexión; "
+                    self.error_motor or "Sin referencias disponibles. Revise las fotos y la conexión; "
                     "luego vuelva a abrir la cámara."
                 )
             return rostros
         except Exception as error:
-            self.sesion_reconocimiento += 1
+            self.invalidar_reconocimiento()
             print("Error detectando rostros:", error)
             self.estado_reconocimiento_label.setText("No se pudo detectar el rostro.")
             return []
@@ -1713,15 +1709,17 @@ class MainWindow(QMainWindow):
                 self.preparar_reconocimiento()
             return
         if respuesta["tipo"] == "preparar":
+            if respuesta.get("error"):
+                self.error_motor = respuesta.get("mensaje", "No se pudo cargar el motor facial.")
             self.referencias_listas = not respuesta.get("error") and respuesta.get("cantidad", 0) > 0
             if self.camara_abierta and self.paginas.currentIndex() == 0:
                 self.estado_reconocimiento_label.setText(
                     "Referencias listas. Ubique un solo rostro." if self.referencias_listas else
-                    "Sin referencias disponibles. Revise las fotos y la conexión; "
+                    self.error_motor or "Sin referencias disponibles. Revise las fotos y la conexión; "
                     "luego vuelva a abrir la cámara."
                 )
             return
-        # Solo la UI persiste, después de validar que el contexto siga vigente.
+        # Validar el contexto antes de autorizar una escritura en el trabajador.
         if (
             respuesta["sesion"] != self.sesion_reconocimiento
             or respuesta["jornada_id"] != self.jornada_id
@@ -1731,19 +1729,20 @@ class MainWindow(QMainWindow):
         ):
             return
         if respuesta.get("error"):
+            if respuesta.get("reiniciar"):
+                self.referencias_listas = False
+                self.error_motor = respuesta.get("mensaje")
             self.estado_reconocimiento_label.setText(
-                "Error en el reconocimiento. Se reintentará."
+                respuesta.get("mensaje", "Error en el reconocimiento. Se reintentará.")
             )
             return
         resultado = respuesta["resultado"]
         if resultado["estado"] == "reconocido":
-            try:
-                exito, estado = procesar_asistencia(
-                    resultado["alumno_id"], self.jornada_id
-                )
-            except Exception as error:
-                print("Error registrando asistencia:", error)
-                exito, estado = False, "error"
+            if respuesta["tipo"] == "reconocer":
+                self.estado_reconocimiento_label.setText("Guardando asistencia...")
+                self.enviar_trabajo("asistencia", resultado=resultado)
+                return
+            exito, estado = respuesta["asistencia"]
             nombre = f'{resultado["nombre"]} {resultado["apellido"]}'
             mensajes = {
                 "entrada_registrada": "Entrada registrada",
@@ -1769,7 +1768,7 @@ class MainWindow(QMainWindow):
 
     def cerrar_camara(self):
 
-        self.sesion_reconocimiento += 1
+        self.invalidar_reconocimiento()
         self.referencias_listas = False
         self.recarga_pendiente = False
 
@@ -1820,7 +1819,7 @@ class MainWindow(QMainWindow):
 
     def ir_jornada(self):
 
-        self.sesion_reconocimiento += 1
+        self.invalidar_reconocimiento()
 
         # Solo dejamos de dibujar.
         # No cerramos la webcam salvo que se pulse Editar.
@@ -1840,9 +1839,17 @@ class MainWindow(QMainWindow):
             "Cree, edite o termine una Jornada."
         )
 
+    def ir_informes(self):
+        self.invalidar_reconocimiento()
+        self.timer_camara.stop()
+        self.paginas.setCurrentWidget(self.pagina_informes)
+        self.titulo_pagina.setText("Exportar Informes")
+        self.subtitulo_pagina.setText("Consulte sus Jornadas y guarde la asistencia en Excel o PDF.")
+        self.pagina_informes.refrescar()
+
     def ir_registro_alumno(self):
 
-        self.sesion_reconocimiento += 1
+        self.invalidar_reconocimiento()
 
         # Cámara permanece encendida.
         if self.timer_camara.isActive():
@@ -1874,13 +1881,13 @@ class MainWindow(QMainWindow):
         self.cerrando = True
         self.cerrar_camara()
         if self.hilo_reconocimiento.isRunning():
-            # No destruir ni terminar forzosamente un hilo que aún ejecuta FaceNet.
-            # La ventana sigue atendiendo eventos hasta recibir finished.
+            # Detener el proceso facial propio sin esperar ni bloquear la interfaz.
+            # El hilo termina cuando confirma que el proceso ya se cerró.
             self.setEnabled(False)
             self.estado_reconocimiento_label.setText(
                 "Cerrando: esperando que termine el procesamiento actual..."
             )
-            self.hilo_reconocimiento.quit()
+            self.solicitar_cierre_motor.emit()
             event.ignore()
             return
         event.accept()

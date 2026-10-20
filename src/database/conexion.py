@@ -34,7 +34,13 @@ def conectar_bd():
         port=os.getenv("POSTGRES_PORT"),
         dbname=os.getenv("POSTGRES_DB"),
         user=os.getenv("POSTGRES_USER"),
-        password=os.getenv("POSTGRES_PASSWORD")
+        password=os.getenv("POSTGRES_PASSWORD"),
+        connect_timeout=5,
+        options="-c statement_timeout=5000 -c lock_timeout=2000",
+        keepalives=1,
+        keepalives_idle=5,
+        keepalives_interval=2,
+        keepalives_count=2
     )
 
 
@@ -441,13 +447,19 @@ def actualizar_jornada(
 
 def procesar_asistencia(
     alumno_id,
-    jornada_id
+    jornada_id,
+    cancelacion=None
 ):
 
     conexion = None
     cursor = None
 
+    def cancelada():
+        return cancelacion is not None and cancelacion.is_set()
+
     try:
+        if cancelada():
+            return False, "cancelada"
 
         conexion = conectar_bd()
         cursor = conexion.cursor()
@@ -504,6 +516,10 @@ def procesar_asistencia(
 
         asistencia = cursor.fetchone()
 
+        if cancelada():
+            conexion.rollback()
+            return False, "cancelada"
+
         ahora = datetime.now()
 
         # ====================================================
@@ -534,6 +550,9 @@ def procesar_asistencia(
                 )
             )
 
+            if cancelada():
+                conexion.rollback()
+                return False, "cancelada"
             conexion.commit()
 
             return (
@@ -599,6 +618,9 @@ def procesar_asistencia(
             )
         )
 
+        if cancelada():
+            conexion.rollback()
+            return False, "cancelada"
         conexion.commit()
 
         return (
